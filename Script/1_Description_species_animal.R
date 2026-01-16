@@ -20,7 +20,8 @@ str(species_animal)
 
 species_an_occ <- species_animal$`Occurrences seuil`
 
-# Nettoyage des donnees (suppr espaces, changements tirets etc)
+# Renommage des colonnes
+# Nettoyage des noms de colonnes (suppr espaces, changements tirets etc)
 colnames(species_an_occ) <- species_an_occ[2,] %>%
   str_replace_all(" ", "") %>%
   str_replace_all("-", "_") %>%
