@@ -3,6 +3,7 @@ library(dplyr)
 library(stringi)
 library(stringr)
 library(ggplot2)
+library(leaflet)
 
 ########################################################
 ### Description des espèces animales échantillonnées ###
@@ -43,6 +44,11 @@ ggsave("Output/hist_species.pdf", plot = plot1)
 ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
   geom_bar(aes(x=Date))
 
-
-
+# Carte de répartition des échantillons
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
+                   species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
+# 2 échantillons avec NA
+# Echantillons plus bas que prévu ?
   
