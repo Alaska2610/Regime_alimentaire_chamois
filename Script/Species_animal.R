@@ -27,11 +27,14 @@ species_an_occ1 <- species_an_occ %>%
                   14:28, 30, 32, 34), ~as.numeric(as.character(.)))) %>%
   mutate(Date = as.Date(as.numeric(Date), origin = "1899-12-30"))
 
-ggplot(species_an_occ1) +
+plot1 <- ggplot(species_an_occ1) +
   geom_bar(aes(x=Taxon1))
+
+ggsave("Output/hist_species.pdf", plot = plot1)
 
 ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
   geom_bar(aes(x=Date))
+
 
 
   
