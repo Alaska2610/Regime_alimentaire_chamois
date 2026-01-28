@@ -21,6 +21,9 @@ setwd("/Volumes/SHARED/Git_Projects/Regime_alimentaire_chamois")
 # Importer le jeu de données trnl 
 # import_list pour importer toutes les feuilles du fichier
 species_trnl <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100.xlsx", col_names = FALSE)
+species_aste <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste-seuil_100-100-100.xlsx", col_names = FALSE)
+species_cype <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype-seuil_100-100-100.xlsx", col_names = FALSE)
+species_poac <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac-seuil_100-100-100.xlsx", col_names = FALSE)
 
 # On se focalise sur la feuille indiquant la liste des plantes identifiées
 taxo_trnl <- species_trnl$`Taxonomie seuil`
@@ -57,17 +60,23 @@ head(plantes_terrain)
 # Plantes du régime présentes dans la bdd BFC
 common_species <- taxo_trnl1 %>%
   filter(scientific_name %in% plantes_terrain$nom_scientifique1)
+# 26 espèces présentes dans le régime et dans la bdd BFC
 
-# Plantes du régime présentes dans la bdd BFC
+# Plantes du régime non présentes dans la bdd BFC
 non_common_plants <- taxo_trnl1 %>%
   filter(!scientific_name %in% plantes_terrain$nom_scientifique1) 
 
-  # Focus sur la liste des espèces présentes dans le régime mais non présentes dans la bdd BFC
+  # Focus sur la liste des ESPECES présentes dans le régime mais non présentes dans la bdd BFC
 non_common_species <- non_common_plants %>%
   filter(rank == "species") 
-# 17 espèces
+# 17 espèces présentes dans le régime qui ne sont pas dans la bdd BFC
 
+# Nombre d'espèces dans le régime
+diet_species <- taxo_trnl1 %>%
+  filter(rank == "species") 
+# 43 plantes au niveau ESPECE dans le régime
 
+table(taxo_trnl1$rank)
 
 
 
