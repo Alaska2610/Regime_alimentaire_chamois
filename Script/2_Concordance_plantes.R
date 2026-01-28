@@ -70,6 +70,7 @@ non_common_plants <- taxo_trnl1 %>%
 non_common_species <- non_common_plants %>%
   filter(rank == "species") 
 # 17 espèces présentes dans le régime qui ne sont pas dans la bdd BFC
+non_common_species$scientific_name
 
 # Nombre d'espèces dans le régime
 diet_species <- taxo_trnl1 %>%
