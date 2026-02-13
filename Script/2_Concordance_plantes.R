@@ -4,6 +4,7 @@ library(stringi)
 library(stringr)
 library(ggplot2)
 library(readODS)
+library(tidyr)
 
 #########################################################
 ###   Concordance Plantes Régime vs Plantes Terrain   ###
@@ -57,22 +58,22 @@ head(plantes_terrain)
 ## Concordances
 #########################
 
-# Plantes du régime présentes dans la bdd BFC
+# Plantes de la bdd régime présentes dans la bdd BFC
 common_species <- taxo_trnl1 %>%
   filter(scientific_name %in% plantes_terrain$nom_scientifique1)
 # 26 espèces présentes dans le régime et dans la bdd BFC
 
-# Plantes du régime non présentes dans la bdd BFC
+# Plantes de la bdd régime non présentes dans la bdd BFC
 non_common_plants <- taxo_trnl1 %>%
   filter(!scientific_name %in% plantes_terrain$nom_scientifique1) 
 
-  # Focus sur la liste des ESPECES présentes dans le régime mais non présentes dans la bdd BFC
+  # Focus sur la liste des ESPECES présentes dans la bdd régime mais non présentes dans la bdd BFC
 non_common_species <- non_common_plants %>%
   filter(rank == "species") 
-# 17 espèces présentes dans le régime qui ne sont pas dans la bdd BFC
+# 17 espèces présentes dans la bdd régime qui ne sont pas dans la bdd BFC
 non_common_species$scientific_name
 
-# Nombre d'espèces dans le régime
+# Nombre d'ESPECES dans la bdd régime
 diet_species <- taxo_trnl1 %>%
   filter(rank == "species") 
 # 43 plantes au niveau ESPECE dans le régime
@@ -80,6 +81,24 @@ diet_species <- taxo_trnl1 %>%
 table(taxo_trnl1$rank)
 
 
+### Liste globale des espèces "species_list"
+# On récupère la liste des espèces potentielles identifiées dans le régime "species_list"
+species_list <- taxo_trnl1$species_list
 
+species_list_clean <- str_remove_all(species_list, "\\[|\\]|'")
+
+df_species_list <- tibble(species = species_list_clean) %>%
+  separate_rows(species, sep = ",\\s*")
+
+df_species_list_unik <- df_species_list %>% distinct()
+
+
+# Plantes de la bdd régime non présentes dans la bdd BFC
+non_common_plants_all <- df_species_list %>%
+  filter(!species %in% plantes_terrain$nom_scientifique1) 
+
+# Plantes de la bdd régime présentes dans la bdd BFC
+common_species_all <- df_species_list %>%
+  filter(species %in% plantes_terrain$nom_scientifique1)
 
 
