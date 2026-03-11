@@ -21,10 +21,10 @@ setwd("/Volumes/SHARED/Git_Projects/Regime_alimentaire_chamois")
 
 # Importer le jeu de données trnl 
 # import_list pour importer toutes les feuilles du fichier
-species_trnl <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100.xlsx", col_names = FALSE)
-species_aste <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste-seuil_100-100-100.xlsx", col_names = FALSE)
-species_cype <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype-seuil_100-100-100.xlsx", col_names = FALSE)
-species_poac <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac-seuil_100-100-100.xlsx", col_names = FALSE)
+species_trnl <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
+species_aste <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-Aste-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
+species_cype <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-Cype-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
+species_poac <- import_list("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-Poac-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
 
 # On se focalise sur la feuille indiquant la liste des plantes identifiées
 taxo_trnl <- species_trnl$`Taxonomie seuil`
@@ -62,6 +62,7 @@ head(plantes_terrain)
 common_species <- taxo_trnl1 %>%
   filter(scientific_name %in% plantes_terrain$nom_scientifique1)
 # 26 espèces présentes dans le régime et dans la bdd BFC
+# avec filtre DREAL : 63 espèces présentes dans le régime et dans la bdd BFC
 
 # Plantes de la bdd régime non présentes dans la bdd BFC
 non_common_plants <- taxo_trnl1 %>%
@@ -71,14 +72,18 @@ non_common_plants <- taxo_trnl1 %>%
 non_common_species <- non_common_plants %>%
   filter(rank == "species") 
 # 17 espèces présentes dans la bdd régime qui ne sont pas dans la bdd BFC
+# avec filtre DREAL : 0 espèces présentes dans la bdd régime qui ne sont pas dans la bdd BFC
 non_common_species$scientific_name
 
 # Nombre d'ESPECES dans la bdd régime
 diet_species <- taxo_trnl1 %>%
   filter(rank == "species") 
 # 43 plantes au niveau ESPECE dans le régime
+# avec fitre DREAL : 63 plantes au niveau ESPECE dans le régime
 
+# Nb dans chaque taxon
 table(taxo_trnl1$rank)
+# avec filtre DREAL : 63 espèces, 41 genres, 10 familles, 3 ordre, 1 classe
 
 
 ### Liste globale des espèces "species_list"
@@ -88,17 +93,20 @@ species_list <- taxo_trnl1$species_list
 species_list_clean <- str_remove_all(species_list, "\\[|\\]|'")
 
 df_species_list <- tibble(species = species_list_clean) %>%
-  separate_rows(species, sep = ",\\s*")
-
-df_species_list_unik <- df_species_list %>% distinct()
-
+  separate_rows(species, sep = ",\\s*") %>% 
+  distinct()
 
 # Plantes de la bdd régime non présentes dans la bdd BFC
 non_common_plants_all <- df_species_list %>%
   filter(!species %in% plantes_terrain$nom_scientifique1) 
+# avec filtre DREAL : 19 espèces
 
 # Plantes de la bdd régime présentes dans la bdd BFC
 common_species_all <- df_species_list %>%
   filter(species %in% plantes_terrain$nom_scientifique1)
+# avec filtre DREAL : 346 espèces
+
+
+
 
 
