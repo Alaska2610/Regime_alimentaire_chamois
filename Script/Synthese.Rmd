@@ -1,6 +1,6 @@
 ---
 title: "Synthese des analyses du régime alimentaire du chamois dans les Vosges du Sud"
-author: "Fédérations de chasse de Haute-Saône, des Vosges et du Territoire de Berlfort"
+author: "Fédérations départementale des chasseurs de Haute-Saône, des Vosges et du Territoire de Belfort"
 date: "10 avril 2026"
 output: html_document
 
@@ -164,8 +164,10 @@ ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ
 
 POUR LA SUITE :
 
+- Voir avec Glenn comment intégrer les bases de données avec primers spécifiques
+
 - Tester l'effet saison 
 
 - Clusters géographiques ?
 
-- Voir avec Glenn comment intégrer les bases de données avec primers spécifiques
+- Comment évolue la variabilité inter-individuelle dans le temps ?
