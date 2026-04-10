@@ -4,6 +4,7 @@ library(stringi)
 library(stringr)
 library(ggplot2)
 library(readxl)
+library(tidyr)
 
 options(tibble.width = Inf)
 
@@ -18,34 +19,53 @@ setwd("~/REGIME_ALIM_CHAM_GIT/Regime_alimentaire_chamois")
 setwd("/Volumes/SHARED/Git_Projects/Regime_alimentaire_chamois")
 
 # Importer le jeu de données trnl 
-species_trnl <- read_excel("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
+species_trnl_lot1 <- read_excel("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-Liste_DREAL/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
+species_trnl_lot2 <- read_excel("BDD/ANTAGENE-F1064-FDC70-Regime_Chamois-lot2-trnL-Liste_DREAL/ANTAGENE-F1064-FDC70-Regime_Chamois-lot2-trnL-seuil_100-100-100-Liste_DREAL.xlsx", col_names = FALSE)
 #species_trnl <- read_excel("BDD/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl/ANTAGENE-F1016-FDC70-Regime_Chamois-trnl-seuil_100-100-100.xlsx", col_names = FALSE)
 
 # Nettoyage des noms de colonnes (suppr espaces, changements tirets etc)
-colnames(species_trnl) <- as.character(species_trnl[3,])
-species_trnl <- species_trnl[-3,]
+colnames(species_trnl_lot1) <- as.character(species_trnl_lot1[3,])
+species_trnl_lot1 <- species_trnl_lot1[-3,]
 
-colnames(species_trnl) <- colnames(species_trnl) %>%
+colnames(species_trnl_lot1) <- colnames(species_trnl_lot1) %>%
   str_replace_all(" ", "") %>%
   str_replace_all("-", "_") %>%
   stri_trans_general("Latin-ASCII")
 
+colnames(species_trnl_lot2) <- as.character(species_trnl_lot2[3,])
+species_trnl_lot2 <- species_trnl_lot2[-3,]
+
+colnames(species_trnl_lot2) <- colnames(species_trnl_lot2) %>%
+  str_replace_all(" ", "") %>%
+  str_replace_all("-", "_") %>%
+  stri_trans_general("Latin-ASCII")
 
 # J'extrait les deux premières lignes (occurences, vecteur de rangs taxonomiques) pour les isoler. 
 # puis convertir en vecteur simple pour manipuler facilement
-occurence_trnl_vect <- unlist(species_trnl[1, 20:146]) # 20:151
-occurence_trnl_vect <- factor(occurence_trnl_vect)
+occurence_trnl_vect_lot1 <- unlist(species_trnl_lot1[1, 20:137]) # 20:151
+occurence_trnl_vect_lot1 <- factor(occurence_trnl_vect_lot1)
 
-rangs_trnl_vect <- as.vector(unlist(species_trnl[2, 20:146])) # 20:151
-rangs_trnl_vect <- factor(rangs_trnl_vect)
-rangs_trnl_vect
+rangs_trnl_vect_lot1 <- as.vector(unlist(species_trnl_lot1[2, 20:137])) # 20:151
+rangs_trnl_vect_lot1 <- factor(rangs_trnl_vect_lot1)
+rangs_trnl_vect_lot1
+
+occurence_trnl_vect_lot2 <- unlist(species_trnl_lot2[1, 21:144]) # 20:151
+occurence_trnl_vect_lot2 <- factor(occurence_trnl_vect_lot2)
+
+rangs_trnl_vect_lot2 <- as.vector(unlist(species_trnl_lot2[2, 21:144])) # 20:151
+rangs_trnl_vect_lot2 <- factor(rangs_trnl_vect_lot2)
+rangs_trnl_vect_lot2
+
+rangs_trnl_vect <- c(rangs_trnl_vect_lot1, rangs_trnl_vect_lot2)
 
 # Vérification et modification des classes 
-class(occurence_trnl_vect)
-class(rangs_trnl_vect)
+class(occurence_trnl_vect_lot1)
+class(rangs_trnl_vect_lot1)
+
+class(occurence_trnl_vect_lot2)
+class(rangs_trnl_vect_lot2)
 
 # Quelle précision pour mes données ? compter par rangs (species, family etc.)
-rangs_trnl_vect
 sort(table(rangs_trnl_vect), decreasing = TRUE) #tableau répartition rangs
 distribution_species <- as.data.frame(table(rangs_trnl_vect))
 colnames(distribution_species) <- c("rangs", "count")
@@ -65,13 +85,14 @@ ggplot(distribution_species, aes(x = rangs, y = count, fill = rangs)) +
 
 ##### Extraction des données avec occurrences par échantillons 
 ## BDD avec uniquement les espèces
-samples_trnl_onlyspecies <- species_trnl[, 20:146]
+samples_trnl_onlyspecies_lot1 <- species_trnl_lot1[, 20:137]
+samples_trnl_onlyspecies_lot2 <- species_trnl_lot2[, 21:144]
 
 # mettre la ligne des noms de plantes comme nom de colonnes et supprimer la ligne nom (ligne 3).
 # + supprimer la ligne somme des occurrences que j'avais extraite plus tôt 
-colnames(samples_trnl_onlyspecies) <- as.character(samples_trnl_onlyspecies[3,])
-samples_trnl_onlyspecies <- samples_trnl_onlyspecies[-3,]
-samples_trnl_onlyspecies <- samples_trnl_onlyspecies[-1,]
+colnames(samples_trnl_onlyspecies_lot1) <- as.character(samples_trnl_onlyspecies_lot1[3,])
+samples_trnl_onlyspecies_lot1 <- samples_trnl_onlyspecies_lot1[-3,]
+samples_trnl_onlyspecies_lot1 <- samples_trnl_onlyspecies_lot1[-1,]
 
 
 
@@ -79,12 +100,17 @@ samples_trnl_onlyspecies <- samples_trnl_onlyspecies[-1,]
 ### Visualisation ###
 #####################
 
-head(species_trnl)
-species_trnl_ok <- species_trnl[-c(1,2),]
+head(species_trnl_lot2)
+species_trnl_ok_lot1 <- species_trnl_lot1[-c(1,2),]
+species_trnl_ok_lot2 <- species_trnl_lot2[-c(1,2),]
+
+species_trnl_ok <- plyr::rbind.fill(species_trnl_ok_lot1, species_trnl_ok_lot2)
+
+save(species_trnl_ok, file="Output/Rdata/species_trnl_ok.Rdata")
 
 # Passer en bdd "long"
 species_trnl_long <- species_trnl_ok %>%
-  pivot_longer(cols = c(20 : 137),
+  pivot_longer(cols = c(20:137, 148:198),
                names_to = "species",
                values_to = "occurrences") %>%
   mutate(occurrences = as.numeric(as.character(occurrences)))
@@ -92,7 +118,7 @@ species_trnl_long <- species_trnl_ok %>%
 # Calcul du % de séquences dans chaque crotte
 species_trnl_long1 <- species_trnl_long %>%
   group_by(N_Antagene) %>%
-  mutate(pourcentage_occ = occurrences/sum(occurrences)*100)
+  mutate(pourcentage_occ = occurrences/sum(occurrences, na.rm=T)*100)
 
 # Calcul de la fréquence de séquences (% moyen de séquences dans le régime)
 freq_seq_mean <- species_trnl_long1 %>%

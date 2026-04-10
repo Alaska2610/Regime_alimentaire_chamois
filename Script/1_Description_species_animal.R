@@ -52,32 +52,4 @@ species_an_occ1 <- plyr::rbind.fill(species_an_occ1_lot1, species_an_occ1_lot2)
 
 # On sauve le .Rdata pour l'utiliser dans le Rmarkdown
 save(species_an_occ1, file="Output/Rdata/species_an_occ1.Rdata")
-
-# Graph de répartition des échantillons par espèce d'ongules 
-plot1 <- ggplot(species_an_occ1) +
-  geom_bar(aes(x=Taxon1)) +
-  ylab("Nombre de fecès") +
-  xlab("Espèces identifées")
-ggsave("Output/hist_species.pdf", plot = plot1) # Sauver le plot
-
-# Plot nb d'échantillons par jour
-plot2 <- ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
-  geom_bar(aes(x=Date)) +
-  ylab("Nombre de fecès")
-ggsave("Output/hist_pardate.pdf", plot = plot2) # Sauver le plot
-
-# Plot nb d'échantillons par département
-plot3 <- ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
-  geom_bar(aes(x=as.factor(as.character(Departement)))) +
-  ylab("Nombre de fecès") +
-  xlab("Département")
-ggsave("Output/hist_pardepartement.pdf", plot = plot3) # Sauver le plot
-
-# Carte de répartition des échantillons
-leaflet() %>%
-  addTiles() %>%
-  addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
-                   species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
-# 2 échantillons avec NA
-# Echantillons plus bas que prévu ?
   

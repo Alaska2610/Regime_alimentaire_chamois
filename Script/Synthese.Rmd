@@ -1,0 +1,70 @@
+---
+title: "Synthese des analyses du régime alimentaire du chamois dans les Vosges du Sud"
+author: "Fédérations de chasse de Haute-Saône, des Vosges et du Territoire de Berlfort"
+date: "10 avril 2026"
+output: pdf_document
+
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "/Volumes/SHARED/Git_Projects/Regime_alimentaire_chamois/Output"
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-data, echo=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(leaflet)
+
+# Si besoin de mettre à jour, refaire tourner "1_Description_species_animal.R"
+load("../Output/Rdata/species_an_occ1.Rdata")
+# Si besoin de mettre à jour, refaire tourner "1_Description_species_plants_trnl.R"
+load("../Output/Rdata/species_trnl_ok.Rdata")
+```
+
+## Etat des lieux des espèces animales échantillonnées
+
+Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce.
+
+```{r plot1, echo=FALSE}
+ggplot(species_an_occ1) +
+  geom_bar(aes(x=Taxon1)) +
+  ylab("Nombre de fecès") +
+  xlab("Espèces identifées")
+```
+
+### Nombre de fecès de chamois par jour
+```{r plot2, echo=FALSE}
+ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
+  geom_bar(aes(x=Date)) +
+  ylab("Nombre de fecès")
+```
+
+### Nombre de fecès de chamois par département
+```{r plot3, echo=FALSE}
+ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
+  geom_bar(aes(x=as.factor(as.character(Departement)))) +
+  ylab("Nombre de fecès") +
+  xlab("Département")
+```
+
+### Carte de répartition des échantillons de chamois
+
+Les localisations sont à vérifier : échantillons sans coordonnées + mauvaises localisations pour certains
+```{r map1, echo=FALSE}
+#leaflet() %>%
+#  addTiles() %>%
+#  addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
+#                   species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
+```
+
+## Régime alimentaire
+
+# Tous départements et mois confondus
+
+
