@@ -2,7 +2,7 @@
 title: "Synthese des analyses du régime alimentaire du chamois dans les Vosges du Sud"
 author: "Fédérations de chasse de Haute-Saône, des Vosges et du Territoire de Berlfort"
 date: "10 avril 2026"
-output: pdf_document
+output: html_document
 
 knit: (function(input, ...) {
     rmarkdown::render(
@@ -24,7 +24,7 @@ library(leaflet)
 # Si besoin de mettre à jour, refaire tourner "1_Description_species_animal.R"
 load("../Output/Rdata/species_an_occ1.Rdata")
 # Si besoin de mettre à jour, refaire tourner "1_Description_species_plants_trnl.R"
-load("../Output/Rdata/species_trnl_ok.Rdata")
+load("../Output/Rdata/species_trnl_long.Rdata")
 ```
 
 ## Etat des lieux des espèces animales échantillonnées
@@ -38,14 +38,14 @@ ggplot(species_an_occ1) +
   xlab("Espèces identifées")
 ```
 
-### Nombre de fecès de chamois par jour
+### Nombre de fecès de chamois échantillonnées par jour
 ```{r plot2, echo=FALSE}
 ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
   geom_bar(aes(x=Date)) +
   ylab("Nombre de fecès")
 ```
 
-### Nombre de fecès de chamois par département
+### Nombre de fecès de chamois échantillonnées par département
 ```{r plot3, echo=FALSE}
 ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]) +
   geom_bar(aes(x=as.factor(as.character(Departement)))) +
@@ -53,18 +53,119 @@ ggplot(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra")
   xlab("Département")
 ```
 
-### Carte de répartition des échantillons de chamois
+### Carte de répartition des échantillons de fecès de chamois
 
 Les localisations sont à vérifier : échantillons sans coordonnées + mauvaises localisations pour certains
 ```{r map1, echo=FALSE}
-#leaflet() %>%
-#  addTiles() %>%
-#  addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
-#                   species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
+                   species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
 ```
+
+
 
 ## Régime alimentaire
 
-# Tous départements et mois confondus
+### Composition : pourcentage moyen de chaque plante dans les fecès
+
+Dans le graphique ci-dessous sont présentées uniquement les plantes avec une pourcentage moyen dans les fecès d'au moins 1%.
+Tous départements et mois confondus, les trois plantes les plus présentes dans le régime des chamois sont les rosacées, 
+les érables et la myrtille.
+
+```{r regime1, echo=FALSE}
+species_trnl_long1 <- species_trnl_long %>%
+  group_by(N_Antagene) %>%
+  mutate(pourcentage_occ = occurrences/sum(occurrences, na.rm=T)*100)
+
+# Calcul de la fréquence de séquences (% moyen de séquences dans le régime)
+freq_seq_mean <- species_trnl_long1 %>%
+  group_by(species) %>%
+  summarise(
+    n = n(),
+    moyenne = mean(pourcentage_occ, na.rm = TRUE),
+    sd = sd(pourcentage_occ, na.rm = TRUE),
+    se = sd / sqrt(n),
+    t = qt(0.975, df = n - 1),
+    IC_inf = moyenne - t * se,
+    IC_sup = moyenne + t * se
+  ) %>%
+  arrange(desc(moyenne))
+
+ggplot(freq_seq_mean[which(freq_seq_mean$moyenne>1),], aes(x = reorder(species, -moyenne), y = moyenne)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_errorbar(aes(ymin = IC_inf, ymax = IC_sup), width = 0.2) +
+  labs(
+    x = "Espèce",
+    y = "Moyenne (en %)",
+    title = "Moyenne du pourcentage de séquences par espèce avec IC 95%"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r regime1-pardepartement, echo=FALSE, include=FALSE}
+# Calcul de la fréquence de séquences (% moyen de séquences dans le régime)
+freq_seq_mean_pardep <- species_trnl_long1 %>%
+  group_by(species, Departement) %>%
+  summarise(
+    n = n(),
+    moyenne = mean(pourcentage_occ, na.rm = TRUE),
+    sd = sd(pourcentage_occ, na.rm = TRUE),
+    se = sd / sqrt(n),
+    t = qt(0.975, df = n - 1),
+    IC_inf = moyenne - t * se,
+    IC_sup = moyenne + t * se
+  ) %>%
+  filter(!is.na(Departement)) %>%
+  arrange(desc(moyenne))
+
+ggplot(freq_seq_mean_pardep[which(freq_seq_mean_pardep$moyenne>3),], aes(x = reorder(species, -moyenne), y = moyenne)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_errorbar(aes(ymin = IC_inf, ymax = IC_sup), width = 0.2) +
+  facet_wrap(~Departement) +
+  labs(
+    x = "Espèce",
+    y = "Moyenne (en %)",
+    title = "Moyenne du pourcentage de séquences par espèce avec IC 95%"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Fréquence d'occurrence (= pourcentage de fois où une plante est présente dans une fecès)
+
+Dans le graphique sont présentées uniquement les plantes présentes dans au moins 5% des fecès. 
+Tous départements et mois confondus, les rosacées, la myrtille et la ronce sont respectivement
+présentes dans 84%, 61% et 60% des fecès. 
+
+```{r regime2, echo=FALSE}
+n_feces <- length(unique(species_trnl_long1$N_Antagene))
+
+freq_occ <- species_trnl_long1 %>%
+  group_by(species) %>%
+  filter(!occurrences == 0) %>%
+  summarise(freq_occ = n()/n_feces*100) %>%
+  arrange(desc(freq_occ))
+
+ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ), y = freq_occ)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(
+    x = "Espèce",
+    y = "Fréquence d'occurrence (en %)",
+    title = "Fréquence d'occurrence"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 
+## Pour la suite
+
+POUR LA SUITE :
+
+- Tester l'effet saison 
+
+- Clusters géographiques ?
+
+- Voir avec Glenn comment intégrer les bases de données avec primers spécifiques
