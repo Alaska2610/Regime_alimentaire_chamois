@@ -1,7 +1,7 @@
 ---
 title: "Synthese des analyses du régime alimentaire du chamois dans les Vosges du Sud"
 author: "Fédérations départementale des chasseurs de Haute-Saône, des Vosges et du Territoire de Belfort"
-date: "10 avril 2026"
+date: "17 avril 2026"
 output: html_document
 
 knit: (function(input, ...) {
@@ -24,7 +24,7 @@ library(leaflet)
 # Si besoin de mettre à jour, refaire tourner "1_Description_species_animal.R"
 load("../Output/Rdata/species_an_occ1.Rdata")
 # Si besoin de mettre à jour, refaire tourner "1_Description_species_plants_trnl.R"
-load("../Output/Rdata/species_trnl_long.Rdata")
+load("../Output/Rdata/diet_long_chamois.Rdata")
 ```
 
 ## Etat des lieux des espèces animales échantillonnées
@@ -74,7 +74,7 @@ Tous départements et mois confondus, les trois plantes les plus présentes dans
 les érables et la myrtille.
 
 ```{r regime1, echo=FALSE}
-species_trnl_long1 <- species_trnl_long %>%
+species_trnl_long1 <- diet_long_chamois %>%
   group_by(N_Antagene) %>%
   mutate(pourcentage_occ = occurrences/sum(occurrences, na.rm=T)*100)
 
@@ -162,9 +162,9 @@ ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ
 
 ## Pour la suite
 
-POUR LA SUITE :
+POUR LA SUITE avec toute la base de données :
 
-- Voir avec Glenn comment intégrer les bases de données avec primers spécifiques
+- Calcul d'indices de diversité/équitabilité
 
 - Tester l'effet saison 
 
