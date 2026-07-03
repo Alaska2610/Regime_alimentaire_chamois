@@ -1,7 +1,7 @@
 ---
 title: "Synthese des analyses du régime alimentaire du chamois dans les Vosges du Sud"
 author: "Fédérations départementale des chasseurs de Haute-Saône, des Vosges et du Territoire de Belfort"
-date: "17 avril 2026"
+date: "3 juillet 2026"
 output: html_document
 
 knit: (function(input, ...) {
@@ -14,6 +14,7 @@ knit: (function(input, ...) {
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(dplyr.summarise.inform = FALSE)
 ```
 
 ```{r load-data, echo=FALSE, warning=FALSE, include=FALSE}
@@ -29,7 +30,7 @@ load("../Output/Rdata/diet_long_chamois.Rdata")
 
 ## Etat des lieux des espèces animales échantillonnées
 
-Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce.
+Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce. Parmi les 115 du chamois, 6 ont eu un souci dans le séquençage (0 partout).
 
 ```{r plot1, echo=FALSE}
 ggplot(species_an_occ1) +
@@ -76,7 +77,18 @@ les érables et la myrtille.
 ```{r regime1, echo=FALSE}
 species_trnl_long1 <- diet_long_chamois %>%
   group_by(N_Antagene) %>%
-  mutate(pourcentage_occ = occurrences/sum(occurrences, na.rm=T)*100)
+  mutate(pourcentage_occ = occurrences/sum(occurrences, na.rm=T)*100) %>%
+  filter(!N_Antagene %in% c("E00963497", "E00963498", "E00963508", "E00963751", "E00963843", "E00944163"),
+         !is.na(Departement)) %>%
+  group_by(N_Antagene) %>%                         
+  filter(sum(occurrences, na.rm = TRUE) > 0) %>%
+  ungroup() %>%
+  group_by(species) %>%                         
+  filter(sum(occurrences, na.rm = TRUE) > 0) %>%
+  ungroup() %>%
+  select(-Date) %>%
+  left_join(species_an_occ1[,c("N_Antagene","Date")], by = "N_Antagene") %>%
+  mutate(Month = as.factor(as.character(lubridate::month(Date))))
 
 # Calcul de la fréquence de séquences (% moyen de séquences dans le régime)
 freq_seq_mean <- species_trnl_long1 %>%
@@ -104,8 +116,9 @@ ggplot(freq_seq_mean[which(freq_seq_mean$moyenne>1),], aes(x = reorder(species, 
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-```{r regime1-pardepartement, echo=FALSE, include=FALSE}
-# Calcul de la fréquence de séquences (% moyen de séquences dans le régime)
+```{r regime1-pardepartement, echo=FALSE, warning = FALSE}
+# include = FALSE pour ne pas afficher le graphique
+# Calcul de la fréquence de séquences (% moyen de séquences dans le régime) par département
 freq_seq_mean_pardep <- species_trnl_long1 %>%
   group_by(species, Departement) %>%
   summarise(
@@ -160,9 +173,41 @@ ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ
 ```
 
 
+### Variabilité inter-individuelle
+Dans le 88, le groupe de chamois qui consomme bcp de Acer vient principalement des circuits "Ballon servance" et "Rouge gazon".
+
+```{r heatmap, echo=FALSE, fig.width=20, fig.height=10, out.width="100%"}
+heatmap_regime <- species_trnl_long1 %>%
+  group_by(species) %>%                         
+  filter(mean(pourcentage_occ, na.rm = TRUE) > 1) %>%
+  ungroup() %>%
+  ggplot(aes(x=species, y=N_Antagene, fill=pourcentage_occ)) +
+  geom_tile() +
+  ggtitle("Pourcentage de plantes dans les régimes alimentaires des chamois (>1% dans le régime moyen)") +
+  scale_fill_gradientn(colours = c("white","goldenrod1","orange","red","black"),
+                       limits = c(0, 100),
+                       name = "Pourcentages",
+                       na.value = "white") +  
+  facet_wrap(~ Departement, scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+        axis.text.y = element_text(size = 8),
+        strip.text = element_text(face = "bold", size = 11),
+        panel.grid = element_blank(),
+        legend.position = "right",
+        plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(size = 10)) +
+  labs(x = "Plantes",
+       y = "Fecès") 
+heatmap_regime
+```
+
 ## Pour la suite
 
 POUR LA SUITE avec toute la base de données :
+
+- Besoin des coordonnées correctes des collectes de crottes pour faire le lien entre distance de régime et distance géographique
+
+- Attribuer à chaque plante une catégorie : arbres feuillus, conifères, buissons, graminées, forbs, champignons, mousses, autres
 
 - Calcul d'indices de diversité/équitabilité
 
