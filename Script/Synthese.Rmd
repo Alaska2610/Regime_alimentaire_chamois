@@ -28,6 +28,12 @@ load("../Output/Rdata/species_an_occ1.Rdata")
 load("../Output/Rdata/diet_long_chamois.Rdata")
 ```
 
+## Etat des lieux des plantes présentes dans la bdd Régime et BFC
+
+Toutes les espèces de plantes identifiées dans le régime sont bien dans la bdd BFC. 
+Dans le régime (lot 1, trnl), 63 plantes sont identifiées au niveau de l'espèce, 41 au genre, 10 à la famille, 3 à l'ordre et 1 à la classe.
+Si l'on s'intéresse à toutes les plantes de la colonne "species_list" (toutes les plantes appartenant à un genre, à une famille ou un ordre) alors il y a 19 espèces non présentes dans la bdd BFC.
+
 ## Etat des lieux des espèces animales échantillonnées
 
 Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce. Parmi les 115 du chamois, 6 ont eu un souci dans le séquençage (0 partout).
@@ -211,7 +217,7 @@ POUR LA SUITE avec toute la base de données :
 
 - Calcul d'indices de diversité/équitabilité
 
-- Tester l'effet saison 
+- Tester l'effet saison et département
 
 - Clusters géographiques ?
 
