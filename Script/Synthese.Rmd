@@ -263,4 +263,4 @@ POUR LA SUITE avec toute la base de données :
 
 - Clusters géographiques ?
 
-- Comment évolue la variabilité inter-individuelle dans le temps ?
+- Comment évolue la variabilité inter-individuelle au cours de l'année ?
