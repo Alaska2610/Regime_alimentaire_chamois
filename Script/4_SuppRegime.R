@@ -87,14 +87,18 @@ diet_wide_chamois <- species_trnl_long1 %>%
 colSums(is.na(diet_wide_chamois))
 #diet_wide_chamois[is.na(diet_wide_chamois$Buxbaumiaviridis),]$N_Antagene
 
-apply(diet_wide_chamois[,c(3:188)], 1, sum)
+apply(diet_wide_chamois[,c(5:159)], 1, sum)
+
+save(diet_wide_chamois, file="Output/Rdata/diet_wide_chamois.Rdata")
 
 # Différences de régimes selon les départements ?
 diet_wide_chamois_pardep <- freq_seq_mean_pardep %>% 
   pivot_wider(id_cols = Departement, names_from = species, values_from = moyenne)
 
+save(diet_wide_chamois_pardep, file="Output/Rdata/diet_wide_chamois_pardep.Rdata")
+
 # PCA
-pca_chamois <- dudi.pca(diet_wide_chamois[,c(3:188)], scannf = F, nf = 3)
+pca_chamois <- dudi.pca(diet_wide_chamois[,c(5:159)], scannf = F, nf = 3)
 scatter(pca_chamois, npcs=3)
 # BCA
 bet_recouv <- bca(pca_chamois, as.factor(diet_wide_chamois$Departement), scan = FALSE, nf = 2)
@@ -102,7 +106,7 @@ s.class(bet_recouv$ls, as.factor(diet_wide_chamois$Departement), sub = "Between 
 plot(bet_recouv)
 # PcoA
 # Représente la distance euclidienne entre les fecès
-pcoa_diet <- pcoa(dist(diet_wide_chamois[,c(3:188)]))
+pcoa_diet <- pcoa(dist(diet_wide_chamois[,c(5:159)]))
 biplot(pcoa_diet)
 
 scores <- as.data.frame(pcoa_diet$vectors[, 1:2])
@@ -120,20 +124,23 @@ ggplot(scores, aes(x = Axis1, y = Axis2, color = departement)) +
        color = "Département") +
   theme_minimal()
 
+save(scores, file="Output/Rdata/scores_pcoa.Rdata")
+save(var_exp, file="Output/Rdata/var_exp_pcoa.Rdata")
+
 
 # Dendrogrammes
-dist_matrix <- dist(diet_wide_chamois[,c(5:157)], method = "euclidean")
+dist_matrix <- dist(diet_wide_chamois[,c(5:159)], method = "euclidean")
 hc <- hclust(dist_matrix, method = "ward.D2")
-plot(hc, labels = diet_wide_chamois$combi_name)
+plot(hc, labels = diet_wide_chamois$combi_name, cex=1.2)
 
 ## K-means - classification non supervisée
 # Axes n'expliquent pas bcp de variance
-diet_clust <- diet_wide_chamois[,c(4:156)]
+diet_clust <- diet_wide_chamois[,c(5:159)]
 
 fviz_nbclust(diet_clust, kmeans, method = "wss")
 fviz_nbclust(diet_clust, kmeans, method = "silhouette")
 
-k3 <- kmeans(diet_clust, centers = 3, nstart = 100)
+k3 <- kmeans(diet_clust, centers = 2, nstart = 100)
 fviz_cluster(k3, data = diet_clust)
 
 # Indice de Pianka pour mesurer l'overlap entre régimes / diet similarity entre départements
@@ -156,6 +163,8 @@ ggplot(pianka_df, aes(x = Dept1, y = Dept2, fill = Overlap)) +
   labs(title = "Indice de recouvrement de niche (Pianka)", x = "", y = "") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 # Fort recouvrement de régimes moyens entre les départements
+
+save(pianka_df, file="Output/Rdata/pianka_df.Rdata")
 
 # Variation inter-individuelle
 # Calcul de l'indice de Schoener

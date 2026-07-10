@@ -26,6 +26,12 @@ library(leaflet)
 load("../Output/Rdata/species_an_occ1.Rdata")
 # Si besoin de mettre à jour, refaire tourner "1_Description_species_plants_trnl.R"
 load("../Output/Rdata/diet_long_chamois.Rdata")
+# Si besoin de mettre à jour, refaire tourner "4_SuppRegime.R"
+load("../Output/Rdata/scores_pcoa.Rdata")
+load("../Output/Rdata/var_exp_pcoa.Rdata")
+load("../Output/Rdata/pianka_df.Rdata")
+load("../Output/Rdata/diet_wide_chamois.Rdata")
+load("../Output/Rdata/diet_wide_chamois_pardep.Rdata")
 ```
 
 ## Etat des lieux des plantes présentes dans la bdd Régime et BFC
@@ -122,6 +128,34 @@ ggplot(freq_seq_mean[which(freq_seq_mean$moyenne>1),], aes(x = reorder(species, 
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+### Fréquence d'occurrence (= pourcentage de fois où une plante est présente dans une fecès)
+
+Dans le graphique sont présentées uniquement les plantes présentes dans au moins 5% des fecès. 
+Tous départements et mois confondus, les rosacées, la myrtille et la ronce sont respectivement
+présentes dans 84%, 61% et 60% des fecès. 
+
+```{r regime2, echo=FALSE}
+n_feces <- length(unique(species_trnl_long1$N_Antagene))
+
+freq_occ <- species_trnl_long1 %>%
+  group_by(species) %>%
+  filter(!occurrences == 0) %>%
+  summarise(freq_occ = n()/n_feces*100) %>%
+  arrange(desc(freq_occ))
+
+ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ), y = freq_occ)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(
+    x = "Espèce",
+    y = "Fréquence d'occurrence (en %)",
+    title = "Fréquence d'occurrence"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+## Variabilité inter-départements
 ```{r regime1-pardepartement, echo=FALSE, warning = FALSE}
 # include = FALSE pour ne pas afficher le graphique
 # Calcul de la fréquence de séquences (% moyen de séquences dans le régime) par département
@@ -152,34 +186,21 @@ ggplot(freq_seq_mean_pardep[which(freq_seq_mean_pardep$moyenne>3),], aes(x = reo
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Fréquence d'occurrence (= pourcentage de fois où une plante est présente dans une fecès)
 
-Dans le graphique sont présentées uniquement les plantes présentes dans au moins 5% des fecès. 
-Tous départements et mois confondus, les rosacées, la myrtille et la ronce sont respectivement
-présentes dans 84%, 61% et 60% des fecès. 
+Ci-dessous est représenté l'indice de Pianka qui mesure le chevauchement entre les régimes moyens de chaque département. Plus la valeur est proche de 1 plus les régimes sont similaires entre départements.
 
-```{r regime2, echo=FALSE}
-n_feces <- length(unique(species_trnl_long1$N_Antagene))
-
-freq_occ <- species_trnl_long1 %>%
-  group_by(species) %>%
-  filter(!occurrences == 0) %>%
-  summarise(freq_occ = n()/n_feces*100) %>%
-  arrange(desc(freq_occ))
-
-ggplot(freq_occ[which(freq_occ$freq_occ>5),], aes(x = reorder(species, -freq_occ), y = freq_occ)) +
-  geom_bar(stat = "identity", fill = "skyblue") +
-  labs(
-    x = "Espèce",
-    y = "Fréquence d'occurrence (en %)",
-    title = "Fréquence d'occurrence"
-  ) +
+```{r pianka, echo=FALSE, warning = FALSE}
+ggplot(pianka_df, aes(x = Dept1, y = Dept2, fill = Overlap)) +
+  geom_tile() +
+  geom_text(aes(label = round(Overlap, 2)), color = "black") +
+  scale_fill_gradient(low = "white", high = "darkred", limits = c(0,1)) +
   theme_minimal() +
+  labs(title = "Indice de recouvrement de niche (Pianka)", x = "", y = "") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
-### Variabilité inter-individuelle
+## Variabilité inter-individuelle
 Dans le 88, le groupe de chamois qui consomme bcp de Acer vient principalement des circuits "Ballon servance" et "Rouge gazon".
 
 ```{r heatmap, echo=FALSE, fig.width=20, fig.height=10, out.width="100%"}
@@ -206,6 +227,27 @@ heatmap_regime <- species_trnl_long1 %>%
        y = "Fecès") 
 heatmap_regime
 ```
+
+Ci-dessous est représenté une analyse en composante principale qui mesure la distance euclidienne entre chaque individus. La couleur correspond au département.
+
+```{r pcoa, echo=FALSE, warning = FALSE}
+ggplot(scores, aes(x = Axis1, y = Axis2, color = departement)) +
+  geom_point(size = 2) +
+  stat_ellipse(level = 0.68) +  
+  labs(x = paste0("Axis 1 (", var_exp[1], "%)"),
+       y = paste0("Axis 2 (", var_exp[2], "%)"),
+       color = "Département") +
+  theme_minimal()
+```
+
+Ensuite, nous avons présenté ces distances sous forme de dendrogramme afin de voir si certaines caractéristiques (départements, mois, circuit de comptage) pouvaient visuellement expliquer les clusters. 
+
+```{r dendrogram, echo=FALSE, warning = FALSE, fig.width=20, fig.height=10, out.width="100%"}
+dist_matrix <- dist(diet_wide_chamois[,c(5:159)], method = "euclidean")
+hc <- hclust(dist_matrix, method = "ward.D2")
+plot(hc, labels = diet_wide_chamois$combi_name, cex = 1.5)
+```
+
 
 ## Pour la suite
 
