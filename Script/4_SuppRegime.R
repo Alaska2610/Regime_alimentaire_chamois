@@ -11,6 +11,7 @@ library(cluster)
 library(FactoMineR)
 library(factoextra)
 library(spaa)
+library(vegan)
 
 options(tibble.width = Inf)
 
@@ -108,7 +109,7 @@ save(diet_wide_chamois, file="Output/Rdata/diet_wide_chamois.Rdata")
 # Régime par individu en %
 species_trnl_long1_pfg <- diet_long_chamois %>%
   left_join(plants_in_diet_categorized, by = c("species" = "Plant")) %>%
-  group_by(Functional_group, N_Antagene, Departement, Date) %>%
+  group_by(Functional_group, N_Antagene, Departement, Date, Circuitcomptage) %>%
   summarise(sum_occ = sum(occurrences, na.rm = T)) %>%
   group_by(N_Antagene) %>%
   mutate(pourcentage_occ_pfg = sum_occ/sum(sum_occ, na.rm = T)*100) %>%
@@ -152,6 +153,18 @@ freq_seq_mean_pfg <- species_trnl_long1_pfg %>%
     IC_sup = moyenne + t * se
   ) %>%
   arrange(desc(moyenne))
+
+# Long to wide
+diet_wide_chamois_pfg <- species_trnl_long1_pfg %>% 
+  pivot_wider(id_cols = c(N_Antagene, Departement, Circuitcomptage, Month), names_from = Functional_group, values_from = pourcentage_occ_pfg) %>%
+  mutate(combi_name = paste(Departement, Circuitcomptage, Month, sep=", "))
+
+colSums(is.na(diet_wide_chamois_pfg))
+#diet_wide_chamois[is.na(diet_wide_chamois$Buxbaumiaviridis),]$N_Antagene
+
+apply(diet_wide_chamois_pfg[,c(5:13)], 1, sum)
+
+save(diet_wide_chamois_pfg, file="Output/Rdata/diet_wide_chamois_pfg.Rdata")
 
 
 ######################################
@@ -213,6 +226,36 @@ ggplot(pianka_df_allindiv, aes(x = Indiv1, y = Indiv2, fill = Overlap)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 save(pianka_df_allindiv, file="Output/Rdata/pianka_df_allindiv.Rdata")
+
+# PERMANOVA : différence globale entre départements
+dist_bray <- vegdist(diet_matrix_allindiv, method = "bray")
+permanova <- adonis2(dist_bray ~ Departement, data = diet_wide_chamois, permutations = 999)
+print(permanova)
+
+# Vérifier l'homogénéité des dispersions (condition à vérifier, comme l'homogénéité des variances)
+disp <- betadisper(dist_bray, diet_wide_chamois$Departement)
+anova(disp)  # si significatif, les différences PERMANOVA peuvent être dues à la dispersion, pas juste au centroïde
+plot(disp)
+
+# 5. Indice de Pianka pour mesurer l'overlap entre régimes de chaque individu avec les groupes fonctionnels de plantes
+diet_matrix_allindiv_pfg <- as.data.frame(diet_wide_chamois_pfg[,c(5:13)])
+rownames(diet_matrix_allindiv_pfg) <- as.factor(as.character(diet_wide_chamois_pfg$N_Antagene))
+diet_matrix_allindiv_t_pfg <- t(diet_matrix_allindiv_pfg)
+
+pianka_result_allindiv_pfg <- niche.overlap(diet_matrix_allindiv_t_pfg, method = "pianka")
+pianka_result_allindiv_pfg
+
+pianka_df_allindiv_pfg <- as.data.frame(as.table(as.matrix(pianka_result_allindiv_pfg)))
+colnames(pianka_df_allindiv_pfg) <- c("Indiv1", "Indiv2", "Overlap")
+
+ggplot(pianka_df_allindiv_pfg, aes(x = Indiv1, y = Indiv2, fill = Overlap)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "darkred", limits = c(0,1)) +
+  theme_minimal() +
+  labs(title = "Indice de recouvrement de niche (Pianka) entre tous les individus", x = "", y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save(pianka_df_allindiv_pfg, file="Output/Rdata/pianka_df_allindiv_pfg.Rdata")
 
 
 ######################################
