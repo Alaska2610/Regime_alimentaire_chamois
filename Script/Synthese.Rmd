@@ -255,7 +255,7 @@ POUR LA SUITE avec toute la base de données :
 
 - Besoin des coordonnées correctes des collectes de crottes pour faire le lien entre distance de régime et distance géographique
 
-- Attribuer à chaque plante une catégorie : arbres feuillus, conifères, buissons, graminées, forbs, champignons, mousses, autres
+- Attribuer à chaque plante une catégorie : arbres feuillus, conifères, buissons, graminées, forbs, champignons, mousses, autres et explorer les changements entre saisons
 
 - Calcul d'indices de diversité/équitabilité
 

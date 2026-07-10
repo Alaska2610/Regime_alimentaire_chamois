@@ -1,0 +1,187 @@
+;Plant;Functional_group
+1;Buxbaumiaviridis;mousse
+2;Dicranellaheteromalla;mousse
+3;Dicranodontiumdenudatum;mousse
+4;Grimmiahartmanii;mousse
+5;Sciuro_hypnum;mousse
+6;Isotheciumalopecuroides;mousse
+7;Plagiothecium;mousse
+8;Hypnales;mousse
+9;Lewinskya;mousse
+10;Orthotrichumalpestre;mousse
+11;Tortulaatrovirens;mousse
+12;Apiaceae;forb
+13;Allium;forb
+14;Achilleamillefolium;forb
+15;Leontodonhispidus;forb
+16;Asteraceae;forb
+17;Campanularotundifolia;forb
+18;Brassicaoleracea;forb
+19;Cardamineimpatiens;forb
+20;Lunaria;forb
+21;Brassicaceae;forb
+22;Bistortaofficinalis;forb
+23;Persicaria;forb
+24;Rumexacetosa;forb
+25;Rumex;forb
+26;Sambucus;forb, buisson
+27;Knautia;forb
+28;Valeriana;forb
+29;Impatiensnoli_tangere;forb
+30;Impatiens;forb
+31;Vacciniummyrtillus;buisson
+32;Vacciniumuliginosum;buisson
+33;Vacciniumvitis_idaea;buisson
+34;Vaccinium;buisson
+35;Lysimachianummularia;forb
+36;Cytisusscoparius;buisson
+37;Lotusdorycnium;buisson
+38;Lotus;forb
+39;Robiniapseudoacacia;arbre feuillu
+40;Trifolium;forb
+41;Betulapendula;arbre feuillu
+42;Betula;arbre feuillu
+43;Carpinusbetulus;arbre feuillu
+44;Betulaceae;arbre feuillu
+45;Castaneasativa;arbre feuillu
+46;Fagussylvatica;arbre feuillu
+47;Quercusilex;arbre feuillu
+48;Quercus;arbre feuillu
+49;Fagales;arbre feuillu
+50;Gentiana;forb
+51;Galium;forb
+52;Geraniumsylvaticum;forb
+53;Geranium;forb
+54;Ajuga;forb
+55;Origanumvulgare;forb
+56;Prunellavulgaris;forb
+57;Salviaverticillata;forb
+58;Teucriumscorodonia;forb
+59;Thymus;buisson
+60;Lamiaceae;forb
+61;Fraxinus;arbre feuillu
+62;Oleaceae;arbre, buisson
+63;Melampyrumpratense;forb
+64;Melampyrumsylvaticum;forb
+65;Melampyrum;forb
+66;Digitalispurpurea;forb
+67;Plantagolanceolata;forb
+68;Plantago;forb
+69;Veronicachamaedrys;forb
+70;Veronicaofficinalis;forb
+71;Plantaginaceae;forb
+72;Lamiales;arbre, buisson
+73;Liriodendrontulipifera;arbre feuillu
+74;Hypericumhumifusum;forb
+75;Hypericumperforatum;forb
+76;Hypericumpulchrum;forb
+77;Hypericum;forb
+78;Violacollina;forb
+79;Viola;forb
+80;Tilia;arbre feuillu
+81;Epilobium;forb
+82;Oenothera;forb
+83;Oxalisacetosella;forb
+84;Luzulasylvatica;graminée
+85;Agrostis;graminée
+86;Holcus;graminée
+87;Ranunculus;forb
+88;Ranunculaceae;forb
+89;Ficuscarica;arbre feuillu
+90;Rhamnuscathartica;buisson
+91;Alchemilla;forb
+92;Aphanesaustralis;forb
+93;Filipendulaulmaria;forb
+94;Geum;forb
+95;Potentilla;forb
+96;Prunus;arbre, buisson
+97;Rosa;buisson
+98;Rubusidaeus;buisson
+99;Sanguisorbaofficinalis;forb
+100;Rosaceae;autre
+101;Ulmus;arbre feuillu
+102;Urticadioica;forb
+103;Viscumalbum;buisson
+104;Acerplatanoides;arbre feuillu
+105;Acer;arbre feuillu
+106;Liquidambarstyraciflua;arbre feuillu
+107;Hylotelephiummaximum;forb
+108;Ribesalpinum;buisson
+109;Ribesrubrum;buisson
+110;Chrysospleniumalternifolium;forb
+111;Chrysospleniumoppositifolium;forb
+112;Magnoliopsida;autre
+113;Abies;arbre conifère
+114;Pinus;arbre conifère
+115;Equisetumsylvaticum;autre
+116;Polytrichumformosum;mousse
+117;Ptychostomum;mousse
+118;Dicranumscoparium;mousse
+119;Campylopusflexuosus;mousse
+120;Campylopus;mousse
+121;Leucobryum;mousse
+122;Grimmiatrichophylla;mousse
+123;Brachythecium;mousse
+124;Lescuraeamutabilis;mousse
+125;Plagiotheciumcavifolium;mousse
+126;Plagiotheciumcurvifolium;mousse
+127;Ulotacoarctata;mousse
+128;Ceratodonpurpureus;mousse
+129;Ditrichumheteromallum;mousse
+130;Ditrichumpusillum;mousse
+131;Pleuridiumsubulatum;mousse
+132;Bryopsida;mousse
+133;Cephaloziella;mousse
+134;Diplophyllumalbicans;mousse
+135;Chaerophyllum;forb
+136;Hederahelix;buisson
+137;Anthemisarvensis;forb
+138;Hieracium;forb
+139;Lactucaplumieri;forb
+140;Lapsanacommunis;forb
+141;Myosotisarvensis;forb
+142;Noccaea;forb
+143;Caryophyllaceae;forb
+144;Rumexacetosella;forb
+145;Lysimachia;forb
+146;Primula;forb
+147;Genistapilosa;buisson
+148;Lathyrus;forb
+149;Alnus;buisson
+150;Rubiaceae;autre
+151;Betonicaofficinalis;forb
+152;Galeopsis;forb
+153;Rhinanthus;forb
+154;Digitalis;forb
+155;Populusnigra;arbre feuillu
+156;Populustrichocarpa;arbre feuillu
+157;Salixbabylonica;arbre feuillu
+158;Salix;arbre feuillu
+159;Circaeaalpina;forb
+160;Juncus;autre
+161;Calamagrostis;graminée
+162;Actaeaspicata;forb
+163;Calthapalustris;forb
+164;Rhamnus;buisson
+165;Equisetum;autre
+166;Atrichumundulatum;mousse
+167;Polytrichum;mousse
+168;Scorzoneroidespyrenaica;forb
+169;Carduus;forb
+170;Centaurea;forb
+171;Hieraciumtomentosum;forb
+172;Hieraciumumbellatum;forb
+173;Petasites;forb
+174;Serratulatinctoria;forb
+175;Solidago;forb
+176;Arrhenatherumelatius;graminée
+177;Drymochloasylvatica;graminée
+178;Festucalemanii;graminée
+179;Agrostiscapillaris;graminée
+180;Anthoxanthum;graminée
+181;Dactylisglomerata;graminée
+182;Festuca;graminée
+183;Lolium;graminée
+184;Miliumeffusum;graminée
+185;Poaceae;graminée
+186;Avenellaflexuosa;graminée
