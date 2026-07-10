@@ -194,6 +194,26 @@ ggplot(pianka_df, aes(x = Dept1, y = Dept2, fill = Overlap)) +
 
 save(pianka_df, file="Output/Rdata/pianka_df.Rdata")
 
+# 4. Indice de Pianka pour mesurer l'overlap entre régimes de chaque individu
+diet_matrix_allindiv <- as.data.frame(diet_wide_chamois[,c(5:159)])
+rownames(diet_matrix_allindiv) <- as.factor(as.character(diet_wide_chamois$N_Antagene))
+diet_matrix_allindiv_t <- t(diet_matrix_allindiv)
+
+pianka_result_allindiv <- niche.overlap(diet_matrix_allindiv_t, method = "pianka")
+pianka_result_allindiv
+
+pianka_df_allindiv <- as.data.frame(as.table(as.matrix(pianka_result_allindiv)))
+colnames(pianka_df_allindiv) <- c("Indiv1", "Indiv2", "Overlap")
+
+ggplot(pianka_df_allindiv, aes(x = Indiv1, y = Indiv2, fill = Overlap)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "darkred", limits = c(0,1)) +
+  theme_minimal() +
+  labs(title = "Indice de recouvrement de niche (Pianka) entre tous les individus", x = "", y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save(pianka_df_allindiv, file="Output/Rdata/pianka_df_allindiv.Rdata")
+
 
 ######################################
 ## Variabilité inter-individuelle

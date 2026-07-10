@@ -30,6 +30,7 @@ load("../Output/Rdata/diet_long_chamois.Rdata")
 load("../Output/Rdata/scores_pcoa.Rdata")
 load("../Output/Rdata/var_exp_pcoa.Rdata")
 load("../Output/Rdata/pianka_df.Rdata")
+load("../Output/Rdata/pianka_df_allindiv.Rdata")
 load("../Output/Rdata/diet_wide_chamois.Rdata")
 load("../Output/Rdata/diet_wide_chamois_pardep.Rdata")
 ```
@@ -75,7 +76,6 @@ leaflet() %>%
   addCircleMarkers(species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Longitude, 
                    species_an_occ1[is.element(species_an_occ1$Taxon1, "Rupicapra rupicapra"),]$Latitude, radius=1)
 ```
-
 
 
 ## Régime alimentaire
@@ -189,7 +189,7 @@ ggplot(freq_seq_mean_pardep[which(freq_seq_mean_pardep$moyenne>3),], aes(x = reo
 
 Ci-dessous est représenté l'indice de Pianka qui mesure le chevauchement entre les régimes moyens de chaque département. Plus la valeur est proche de 1 plus les régimes sont similaires entre départements.
 
-```{r pianka, echo=FALSE, warning = FALSE}
+```{r pianka-pardepartement, echo=FALSE, warning = FALSE}
 ggplot(pianka_df, aes(x = Dept1, y = Dept2, fill = Overlap)) +
   geom_tile() +
   geom_text(aes(label = round(Overlap, 2)), color = "black") +
@@ -246,6 +246,17 @@ Ensuite, nous avons présenté ces distances sous forme de dendrogramme afin de 
 dist_matrix <- dist(diet_wide_chamois[,c(5:159)], method = "euclidean")
 hc <- hclust(dist_matrix, method = "ward.D2")
 plot(hc, labels = diet_wide_chamois$combi_name, cex = 1.5)
+```
+
+Pour finir, nous avons recalculé l'indice de recouvrement de niche entre chaque individu. 
+
+```{r pianka, echo=FALSE, warning = FALSE, fig.width=10, fig.height=10, out.width="100%"}
+ggplot(pianka_df_allindiv, aes(x = Indiv1, y = Indiv2, fill = Overlap)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "darkred", limits = c(0,1)) +
+  theme_minimal() +
+  labs(title = "Indice de recouvrement de niche (Pianka) entre tous les individus", x = "", y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
