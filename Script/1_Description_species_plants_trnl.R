@@ -136,7 +136,7 @@ species_trnl_ok_occ <- plyr::rbind.fill(species_trnl_ok_lot1_occ, species_trnl_o
 
 species_trnl_ok_chamois_occ <- species_trnl_ok_occ %>%
   left_join(species_an_occ1[,c("N_Antagene","Taxon1")], by="N_Antagene") %>%
-  filter(Taxon1 == "Rupicapra rupicapra") %>%
+  filter(Taxon1 %in% c("Rupicapra rupicapra","aucun")) %>% # on considère que les crottes sans assignation d'espèces sont des chamois
   select(-Taxon1)
 
 species_trnl_long_occ <- species_trnl_ok_chamois_occ %>%

@@ -43,7 +43,7 @@ Si l'on s'intéresse à toutes les plantes de la colonne "species_list" (toutes 
 
 ## Etat des lieux des espèces animales échantillonnées
 
-Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce. Parmi les 115 du chamois, 6 ont eu un souci dans le séquençage (0 partout).
+Sur 180 fecès échantillonnées, 115 sont du chamois, 11 du cerf, 4 du chevreuil et 50 n'ont été attribuées à aucune espèce. Parmi les 115 du chamois, 6 ont eu un souci dans le séquençage (0 partout). Pour les analyses suivantes, nous avons considéré que les 50 fecès non attribuées à une espèce étaient du chamois.
 
 ```{r plot1, echo=FALSE}
 ggplot(species_an_occ1) +
@@ -84,7 +84,7 @@ leaflet() %>%
 
 Dans le graphique ci-dessous sont présentées uniquement les plantes avec une pourcentage moyen dans les fecès d'au moins 1%.
 Tous départements et mois confondus, les trois plantes les plus présentes dans le régime des chamois sont les rosacées, 
-les érables et la myrtille.
+les érables et la myrtille. Les espèces listées parmi les rosacées peuvent être celles-ci : Rosa nitida, Rosa spinosissima, Fragaria vesca, Rubus caesius, Potentilla sterilis, Rubus ulmifolius, Crataegus crus-galli, Crataegus monogyna, Crataegus laevigata, Sorbus aucuparia, Malus sylvestris, Cydonia oblonga, Cotoneaster coriaceus, Cotoneaster salicifolius, Amelanchier lamarckii, Argentina anserina. Parmi les érables, cela peut concerner les espèces suivantes : Acer negundo, Acer pseudoplatanus, Acer cappadocicum, Acer campestre, Acer opalus, Acer monspessulanum.
 
 ```{r regime1, echo=FALSE}
 species_trnl_long1 <- diet_long_chamois %>%
@@ -258,6 +258,12 @@ ggplot(pianka_df_allindiv, aes(x = Indiv1, y = Indiv2, fill = Overlap)) +
   labs(title = "Indice de recouvrement de niche (Pianka) entre tous les individus", x = "", y = "") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+
+## Espèces de plantes portant à débat
+Les plantes d'intérêt qui suscitent des débats quant à la présence du chamois concernent : Pensée de Vosges, Campanule de Baumgart, Lys martagon, Anémone à fleurs de Narcisse, Arnica des montagnes, Gentiane ? (autres à ajouter). Excepté la campanule de Baumgart, toutes ces essences sont bien présentes dans la liste des espèces de Bourgogne Franche-Comté. 
+Aucune de ces plantes n'est présente au niveau spécifique dans le régime. 
+Nous pouvons toutefois trouver des pensées (genre : Viola) dans le régime de 5 chamois.
 
 
 ## Pour la suite

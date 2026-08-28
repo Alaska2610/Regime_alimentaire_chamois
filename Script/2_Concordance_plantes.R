@@ -53,6 +53,10 @@ plantes_terrain <- read_ods("BDD/231219_sp_statuts_bfc_a_diffuser.ods")  %>%
   
 head(plantes_terrain)
 
+plantes_terrain[is.element(plantes_terrain$nom_scientifique1, 
+                           c("Viola lutea", "Campanula baumgartenii", "Lilium martagon", "Anemonastrum narcissiflorum", "Arnica montana")),]
+# Pas de Campanul baumgartenii dans la BDD BFC
+
 
 #########################
 ## Concordances
@@ -88,25 +92,40 @@ table(taxo_trnl1$rank)
 
 ### Liste globale des espèces "species_list"
 # On récupère la liste des espèces potentielles identifiées dans le régime "species_list"
-species_list <- taxo_trnl1$species_list
+taxo_trnl2 <- taxo_trnl1 %>%
+  mutate(species_list_clean = str_remove_all(species_list, "\\[|\\]|'"))
 
-species_list_clean <- str_remove_all(species_list, "\\[|\\]|'")
+df_species_list <- taxo_trnl2 %>%
+  separate_rows(species_list_clean, sep = ",\\s*") %>% # on attribue une ligne à chaque espèce de species_list
+  mutate(rank_number = case_when(
+    rank == "species" ~ 1,
+    rank == "genus" ~ 2,
+    rank == "family" ~ 3,
+    rank == "order" ~ 4,
+    rank == "class" ~ 5
+  )) %>%
+  group_by(species_list_clean) %>%
+  filter(rank_number == min(rank_number)) %>% # parmi les espèces doublonnées, on conserve celles qui ont le plus petit rang dans le régime
+  ungroup()
 
-df_species_list <- tibble(species = species_list_clean) %>%
-  separate_rows(species, sep = ",\\s*") %>% 
-  distinct()
 
 # Plantes de la bdd régime non présentes dans la bdd BFC
 non_common_plants_all <- df_species_list %>%
-  filter(!species %in% plantes_terrain$nom_scientifique1) 
+  filter(!species_list_clean %in% plantes_terrain$nom_scientifique1) 
 # avec filtre DREAL : 19 espèces
 
 # Plantes de la bdd régime présentes dans la bdd BFC
 common_species_all <- df_species_list %>%
-  filter(species %in% plantes_terrain$nom_scientifique1)
+  filter(species_list_clean %in% plantes_terrain$nom_scientifique1)
 # avec filtre DREAL : 346 espèces
 
+# On regarde les espèces présentes dans les Rosaceae qui n'auraient pas déjà été identifiées à l'espèce
+print(df_species_list[is.element(df_species_list$scientific_name, "Rosaceae"),], n=30)
 
+print(df_species_list[is.element(df_species_list$scientific_name, "Rubus"),], n=30)
 
+print(df_species_list[is.element(df_species_list$scientific_name, "Acer"),], n=30)
 
+unique(df_species_list[df_species_list$rank == "genus",]$scientific_name)
+unique(df_species_list[df_species_list$rank == "species",]$scientific_name)
 

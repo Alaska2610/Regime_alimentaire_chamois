@@ -24,7 +24,7 @@ head(diet_long_chamois)
 load("Output/Rdata/species_an_occ1.Rdata")
 dim(species_an_occ1)
 
-## Extraction de la liste des plantes
+## Extraction de la liste des plantes dans le régime
 plants_in_diet <- unique(diet_long_chamois$species)
 write.csv(plants_in_diet, file="Output/Rdata/plants_in_diet.csv")
 # Réimport de la bdd avec les plantes catégorisées en groupes fonctionnels
@@ -32,7 +32,13 @@ plants_in_diet_categorized <- read.csv("BDD/plants_in_diet_categorized.csv", h=T
   select(-X)
 
 # "E00963497" "E00963498" "E00963508" "E00963751" "E00963843" "E00944163" n'ont que des 0
-# Validé dans le fichier initial, problème de séquençage
+# Vérifié dans le fichier initial, problème de séquençage
+
+# Plantes d'intérêt qui suscitent des débats quant à la présence du chamois
+# Pensée de Vosges, Campanule de Baumgart, Lys martagon, Anémone à fleurs de Narcisse, Arnica des montagnes, Gentiane ?
+plants_sp_debate <- c("Violalutea", "Campanulabaumgartenii", "Liliummartagon", "Anemonastrumnarcissiflorum", "Arnicamontana")
+plants_genus_debate <- c("Viola", "Campanula", "Lilium", "Anemonastrum", "Arnica")
+# Arnica soit-disant menacée par les chamois sur le massif d'Honneck
 
 ######################################
 ## Calculs sur les régimes
@@ -100,7 +106,7 @@ diet_wide_chamois <- species_trnl_long1 %>%
 colSums(is.na(diet_wide_chamois))
 #diet_wide_chamois[is.na(diet_wide_chamois$Buxbaumiaviridis),]$N_Antagene
 
-apply(diet_wide_chamois[,c(5:159)], 1, sum)
+apply(diet_wide_chamois[,c(5:182)], 1, sum)
 
 save(diet_wide_chamois, file="Output/Rdata/diet_wide_chamois.Rdata")
 
@@ -353,4 +359,17 @@ hist(species_trnl_long_tot2$schoener)
 species_trnl_long_tot3 <- species_trnl_long_tot2 %>%
   group_by(N_Antagene) %>%
   summarise(mean_schoener = mean(schoener))
+
+
+#########################
+#### Plantes à débat ####
+#########################
+
+diet_sp_debate <- diet_wide_chamois[,colnames(diet_wide_chamois) %in% plants_sp_debate] # Aucune identifiée à l'espèce
+diet_genus_debate <- diet_wide_chamois[,colnames(diet_wide_chamois) %in% plants_genus_debate]
+hist(diet_genus_debate$Viola)
+# Viola présente de 0.4% à 16.6% dans les régimes de 6 chamois
+diet_wide_chamois[which(diet_wide_chamois$Viola>0),]
+
+
 
