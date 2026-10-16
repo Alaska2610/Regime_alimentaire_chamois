@@ -161,6 +161,18 @@ save_plot <- function(p, name, width = 10, height = 6) {
 
 
 
+```{r installation-exemple, eval=FALSE}
+# À exécuter une seule fois sur chaque ordinateur si nécessaire :
+install.packages(c("rmarkdown", "knitr", "dplyr", "tidyr", "ggplot2", "ggrepel",
+                   "sf", "vegan", "cluster"))
+
+# Depuis la racine du projet :
+rmarkdown::render("Script/Analyse_regimes_chamois_secteurs.Rmd")
+
+# Ou depuis le dossier Script :
+rmarkdown::render("Analyse_regimes_chamois_secteurs.Rmd")
+```
+
 
 # Préparation et contrôles des données
 
@@ -778,6 +790,50 @@ p_heat
 save_plot(p_heat, "groupes_par_secteur.png", height = 7)
 ```
 
+## Lecture des profils alimentaires et de leur répartition
+
+Le tableau ci-dessous rapproche automatiquement les taxons dominants de chaque
+groupe et les secteurs où ses fèces sont les plus nombreuses. Il se recalcule
+si le nombre de groupes ou leurs affectations changent. Les secteurs sont classés
+par **nombre de fèces du groupe**, pas par significativité statistique.
+
+```{r synthese-profils-secteurs}
+synthese_profils <- bind_rows(lapply(seq_len(k), function(z) {
+  taxons <- profils %>% filter(groupe == z) %>%
+    arrange(desc(proportion_moyenne)) %>% head(3)
+  par_secteur <- meta %>% filter(groupe == z, !is.na(secteur)) %>%
+    count(secteur, name = "n_groupe") %>%
+    left_join(effectifs %>% rename(n_secteur = n), by = "secteur") %>%
+    arrange(desc(n_groupe), secteur) %>% head(2)
+  data.frame(
+    Groupe = z,
+    Nombre_de_feces = sum(meta$groupe == z),
+    Principaux_taxons = paste(paste0(taxons$nom_taxon, " (",
+                                     round(100*taxons$proportion_moyenne, 1), " %)"),
+                              collapse = "; "),
+    Secteurs_les_plus_representes = paste(
+      paste0(par_secteur$secteur, " (", par_secteur$n_groupe, "/",
+             par_secteur$n_secteur, " fèces du secteur)"), collapse = "; "),
+    check.names = FALSE)
+}))
+tab(synthese_profils)
+export_csv(synthese_profils, "synthese_profils_et_secteurs.csv")
+```
+
+Les taxons dominants sont des moyennes descriptives : ils ne caractérisent pas
+nécessairement chaque fèces du groupe. Une association apparente à un secteur
+ne signifie pas que le profil lui est exclusif, ni qu'il s'agit d'une préférence
+alimentaire. Les numéros des groupes sont des étiquettes et ne représentent
+pas des distances entre régimes.
+
+```{r lecture-separation-groupes, results='asis'}
+if (stabilite$silhouette < .25) {
+  cat("**Les groupes sont peu séparés et se chevauchent.** Ils doivent être présentés comme des profils alimentaires exploratoires, plutôt que comme des régimes nettement distincts.\n")
+} else {
+  cat("La silhouette décrit la séparation des groupes, mais ne suffit pas à démontrer des unités écologiques distinctes. L'accord entre méthodes et la stabilité doivent également être considérés.\n")
+}
+```
+
 ## Ordination des régimes
 
 Les deux premiers axes de la PCoA résument les distances de Bray-Curtis. Les
@@ -925,6 +981,166 @@ p_map
 save_plot(p_map, "carte_groupes_alimentaires.png", height = 8)
 ```
 
+# Distance alimentaire et distance géographique
+
+Cette analyse répond à une question différente de la classification : **plus deux
+fèces sont éloignées dans l'espace, plus leurs compositions alimentaires sont-elles
+différentes ?** La distance alimentaire est Bray-Curtis sur les profils normalisés ;
+la distance géographique est la distance euclidienne en kilomètres en Lambert-93.
+Les numéros des clusters n'entrent pas dans le calcul de la distance alimentaire.
+
+Une corrélation de Spearman entre matrices est calculée. Les permutations
+réaffectent les échantillons (lignes et colonnes ensemble), et non les paires
+séparément : les milliers de paires ne sont pas des observations indépendantes.
+Le test unilatéral cherche une association positive. Il s'agit d'une exploration :
+une corrélation ne démontre ni un effet causal de l'éloignement ni un gradient
+continu, et les dépendances spatiales/individuelles limitent les p-values de Mantel.
+
+L'analyse privilégiée ne conserve que les **paires du même mois**, avec permutation
+des échantillons au sein de chaque mois. Elle évite ainsi de comparer directement
+un régime de juillet à un régime d'octobre. La corrélation reste une statistique
+regroupée sur les paires de plusieurs mois, et non une régression contrôlant toutes
+les variations saisonnières.
+
+```{r fonction-distance-mantel}
+mantel_distance <- function(p, md, same_month = TRUE, perm_month = TRUE,
+                            nperm = params$nperm) {
+  if (nrow(p) != nrow(md) || anyNA(md$mois))
+    stop("Données et métadonnées mal alignées pour la comparaison de distances.")
+  if (same_month && !perm_month)
+    stop("Le masque même mois requiert des permutations au sein des mois.")
+  db <- as.matrix(vegan::vegdist(p, method = "bray"))
+  dg <- as.matrix(dist(as.matrix(md[, c("est", "nord")]))) / 1000
+  pairs <- which(upper.tri(db), arr.ind = TRUE)
+  if (same_month)
+    pairs <- pairs[md$mois[pairs[, 1]] == md$mois[pairs[, 2]], , drop = FALSE]
+  if (nrow(pairs) < 3) stop("Moins de trois paires utilisables.")
+  # Les rangs des paires retenues sont conservés par les permutations intra-mois.
+  # Les égalités (positions identiques, distances identiques) reçoivent le rang moyen.
+  ranks_b <- rank(db[pairs], ties.method = "average")
+  ranks_g <- rank(dg[pairs], ties.method = "average")
+  ranks_g <- ranks_g - mean(ranks_g)
+  ranks_b_centered <- ranks_b - mean(ranks_b)
+  norm_g <- sqrt(sum(ranks_g^2))
+  norm_b <- sqrt(sum(ranks_b_centered^2))
+  if (norm_g == 0 || norm_b == 0) stop("Distances constantes : corrélation non définie.")
+  observed <- sum(ranks_b_centered*ranks_g)/(norm_b*norm_g)
+  rank_matrix <- matrix(0, nrow(db), ncol(db))
+  rank_matrix[pairs] <- ranks_b
+  rank_matrix[pairs[, 2:1, drop = FALSE]] <- ranks_b
+  blocks <- if (perm_month) md$mois else rep(1L, nrow(md))
+  ge <- 0L
+  for (i in seq_len(nperm)) {
+    pp <- perm_index(blocks)
+    index <- cbind(pp[pairs[, 1]], pp[pairs[, 2]])
+    values <- rank_matrix[index]
+    values <- values - mean(values)
+    rho <- sum(values*ranks_g)/(sqrt(sum(values^2))*norm_g)
+    ge <- ge + (rho >= observed - 1e-12)
+  }
+  list(test = data.frame(n = nrow(md), n_paires = nrow(pairs),
+                         rho_Spearman = observed, p = (ge+1)/(nperm+1),
+                         paires_meme_mois = same_month,
+                         permutations_intra_mois = perm_month,
+                         distance_max_km = max(dg), permutations = nperm),
+       pairs = data.frame(id_1 = md$N_Antagene[pairs[, 1]],
+                          id_2 = md$N_Antagene[pairs[, 2]],
+                          distance_km = dg[pairs], distance_Bray_Curtis = db[pairs],
+                          mois_1 = md$mois[pairs[, 1]], mois_2 = md$mois[pairs[, 2]]))
+}
+```
+
+## Relation globale et sensibilités
+
+```{r correlation-distances}
+set.seed(params$seed + 60L)
+md_distance <- meta[spatial, , drop = FALSE]
+p_distance <- P[spatial, , drop = FALSE]
+mt_global <- mantel_distance(p_distance, md_distance, same_month = FALSE, perm_month = FALSE)
+mt_global_mois <- mantel_distance(p_distance, md_distance, same_month = FALSE, perm_month = TRUE)
+mt_meme_mois <- mantel_distance(p_distance, md_distance, same_month = TRUE, perm_month = TRUE)
+
+# Sensibilité au contraste Hohneck / reste de l'aire échantillonnée.
+# Dans les données initiales, les positions appariées au nord de 48°N sont
+# celles du Hohneck et une fèces voisine sans secteur renseigné.
+# Ce seuil définit ce sous-ensemble géographique pour ce projet ; il doit être
+# revu si l'aire d'étude change. La portée des distances diminue après exclusion.
+hors_hohneck <- md_distance$latitude_gpkg < 48
+mt_hors_hohneck <- NULL
+if (sum(hors_hohneck) >= 5) {
+  mt_hors_hohneck <- mantel_distance(p_distance[hors_hohneck, , drop = FALSE],
+                                    md_distance[hors_hohneck, , drop = FALSE],
+                                    same_month = TRUE, perm_month = TRUE)
+}
+
+# Les 21 unités secteur × mois cartographiables ont ici le même poids.
+md_ag_dist <- agg_spatial$meta
+md_ag_dist$N_Antagene <- paste(md_ag_dist$secteur, md_ag_dist$mois, sep = "__")
+mt_agrege <- mantel_distance(agg_spatial$P, md_ag_dist,
+                            same_month = TRUE, perm_month = TRUE)
+distance_tests <- bind_rows(
+  cbind(Analyse = "Toutes paires ; permutations libres", mt_global$test),
+  cbind(Analyse = "Toutes paires ; permutations intra-mois", mt_global_mois$test),
+  cbind(Analyse = "Paires du même mois ; permutations intra-mois", mt_meme_mois$test),
+  if (!is.null(mt_hors_hohneck))
+    cbind(Analyse = "Sans les positions du Hohneck ; paires du même mois", mt_hors_hohneck$test),
+  cbind(Analyse = "Moyennes secteur × mois ; paires du même mois", mt_agrege$test))
+tab(distance_tests)
+export_csv(distance_tests, "correlation_distances_alimentaires_geographiques.csv")
+export_csv(mt_meme_mois$pairs, "distances_par_paire_meme_mois.csv")
+```
+
+Les tests sont des analyses principale et de sensibilité, et non cinq preuves
+indépendantes. L'absence d'association après retrait du Hohneck ne prouve pas que
+ce secteur est l'unique mécanisme : l'étendue spatiale et la puissance diminuent
+aussi lorsqu'on l'exclut.
+
+## Représentation des distances
+
+```{r graphique-distances, fig.width=11, fig.height=5.5}
+distance_plot <- bind_rows(
+  transform(mt_meme_mois$pairs, analyse = "Toutes les positions appariées"),
+  if (!is.null(mt_hors_hohneck))
+    transform(mt_hors_hohneck$pairs, analyse = "Sans les positions du Hohneck"))
+p_distances <- ggplot(distance_plot, aes(distance_km, distance_Bray_Curtis)) +
+  geom_point(alpha = .15, size = 1, color = "#216e8c") +
+  facet_wrap(~analyse, nrow = 1, scales = "free_x") +
+  labs(x = "Distance géographique (km)", y = "Différence alimentaire (Bray-Curtis)",
+       title = "Les régimes diffèrent-ils davantage avec l'éloignement ?",
+       subtitle = "Paires collectées le même mois ; les paires ne sont pas indépendantes")
+p_distances
+save_plot(p_distances, "distance_alimentaire_vs_geographique.png", width = 11, height = 5.5)
+```
+
+Il n'est pas ajouté de régression ordinaire avec p-value ou bande de confiance
+traitant chaque paire comme indépendante. La relation est évaluée par permutation
+des échantillons.
+
+## Interprétation calculée
+
+Sur les `r mt_meme_mois$test$n` fèces géolocalisées, la corrélation calculée sur les
+paires du même mois est **rho = `r round(mt_meme_mois$test$rho_Spearman, 3)`**
+(p `r fmt_p(mt_meme_mois$test$p)`). En donnant le même poids à chaque unité
+secteur × mois, elle devient **rho = `r round(mt_agrege$test$rho_Spearman, 3)`**
+(p `r fmt_p(mt_agrege$test$p)`).
+
+```{r interpretation-distance, results='asis'}
+if (!is.null(mt_hors_hohneck)) {
+  cat("Après retrait de l'ensemble de positions du Hohneck, rho = **",
+      round(mt_hors_hohneck$test$rho_Spearman, 3), "**, p ",
+      fmt_p(mt_hors_hohneck$test$p), " (n = ", mt_hors_hohneck$test$n, ").\n\n", sep = "")
+  if (mt_meme_mois$test$p < .05 && mt_hors_hohneck$test$p >= .05)
+    cat("**Le contraste entre le Hohneck et les autres positions contribue fortement à l'association globale.** On ne peut pas en déduire un gradient général et continu dans l'ensemble de l'aire d'étude.\n\n")
+}
+if (mt_agrege$test$p >= .05)
+  cat("La relation n'est pas mise en évidence au seuil de 5 % dans la sensibilité donnant le même poids aux unités secteur × mois. Cela invite à nuancer la robustesse de l'association à l'échelle des sites.\n")
+```
+
+Les positions non appariées au GPKG, notamment le Plain des joncs et l'Étang des
+Roseaux avec les données initiales, ne participent pas à cette analyse des
+distances. Compléter et valider ces positions est nécessaire pour étendre la
+conclusion à tous les secteurs.
+
 # Synthèse et limites
 
 ```{r synthese, results='asis'}
@@ -941,6 +1157,24 @@ if (any(spatial_tests$p_Holm < .05)) {
   cat("- Le test spatial ne met pas en évidence de signal positif après correction de Holm.\n")
 }
 cat("- Les", k, "groupes présentés sont des profils alimentaires exploratoires ; leur nombre et leur affectation ne démontrent pas des unités géographiques stables.\n")
+```
+
+## Conclusion sur la correspondance entre régimes et géographie
+
+```{r conclusion-regimes-geographie, results='asis'}
+if (mt_meme_mois$test$rho_Spearman > 0 && mt_meme_mois$test$p < .05) {
+  cat("À l'échelle globale des positions appariées, les régimes sont davantage différents lorsque les fèces sont géographiquement éloignées, en ne comparant que les paires du même mois.\n\n")
+} else {
+  cat("La comparaison des paires du même mois ne met pas en évidence d'association positive entre distance alimentaire et distance géographique au seuil de 5 %.\n\n")
+}
+if (!is.null(mt_hors_hohneck) && mt_meme_mois$test$p < .05 &&
+    mt_hors_hohneck$test$p >= .05) {
+  cat("**La relation semble surtout portée par le contraste entre le Hohneck et les autres positions.** Elle n'est plus détectée lorsque les positions de cet ensemble septentrional sont retirées. Cela suggère une signature alimentaire locale plutôt qu'un gradient continu démontré sur toute l'aire d'étude. L'exclusion réduit aussi l'étendue géographique et la puissance ; elle ne prouve pas que le Hohneck est l'unique mécanisme.\n\n")
+}
+if (mt_agrege$test$p >= .05) {
+  cat("La relation n'est pas mise en évidence lorsque chaque combinaison secteur × mois reçoit le même poids. **La robustesse du lien entre distance alimentaire et distance géographique reste donc limitée à l'échelle des sites.**\n\n")
+}
+cat("La classification et cette comparaison des distances ne définissent pas des zones alimentaires aux frontières nettes. Les positions manquantes, notamment celles du Plain des joncs et de l'Étang des Roseaux dans les données initiales, doivent être complétées pour étendre la conclusion à tous les secteurs.\n")
 ```
 
 Les points suivants doivent accompagner l'interprétation :
@@ -974,7 +1208,8 @@ if (isTRUE(params$export_results)) {
                dispersion = disp_result, comparaisons_paires = pairwise,
                choix_groupes = cluster_choices, stabilite = stabilite,
                tests_spatiaux = spatial_tests,
-               test_spatial_agrege = spatial_agg_test),
+               test_spatial_agrege = spatial_agg_test,
+               correlation_distances = distance_tests),
            file.path(paths$output_dir, "objets_analyse_chamois.rds"))
   writeLines(capture.output(sessionInfo()), file.path(paths$output_dir, "sessionInfo.txt"))
 }

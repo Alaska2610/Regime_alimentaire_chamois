@@ -1,0 +1,6 @@
+"Analyse";"n";"n_paires";"rho_Spearman";"p";"paires_meme_mois";"permutations_intra_mois";"distance_max_km";"permutations"
+"Toutes paires ; permutations libres";115;6555;0,373295758713276;2e-04;FALSE;FALSE;34,9831139722248;4999
+"Toutes paires ; permutations intra-mois";115;6555;0,373295758713276;2e-04;FALSE;TRUE;34,9831139722248;4999
+"Paires du même mois ; permutations intra-mois";115;1765;0,398046637912406;2e-04;TRUE;TRUE;34,9831139722248;4999
+"Sans les positions du Hohneck ; paires du même mois";83;862;0,00775336565484632;0,2978;TRUE;TRUE;14,6899531728603;4999
+"Moyennes secteur × mois ; paires du même mois";25;66;0,281327627596284;0,0264;TRUE;TRUE;34,9789729860256;4999

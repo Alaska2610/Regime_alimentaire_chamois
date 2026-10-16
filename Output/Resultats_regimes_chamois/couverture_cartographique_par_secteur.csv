@@ -1,12 +1,14 @@
 "secteur";"n_regimes";"n_cartographiables"
-"Ballon de Servance";12;12
+"Ballon de Servance";15;15
 "Bois Malvaux";1;0
-"Goulot du Loup";3;3
+"Goulot du Loup";7;7
+"Goutte des Saules";5;5
 "Goutte des saules";3;3
-"Hohneck";30;30
+"Hohneck";31;31
 "Morteville";15;15
-"Plain des bœufs";16;16
-"Plain des joncs";14;0
-"Plancher-les-Mines";2;2
-"Rouge Gazon (neuf bois)";4;4
-"Étang des Roseaux";8;0
+"Plain des bœufs";24;24
+"Plain des joncs";24;0
+"Plain-des-boeufs";2;2
+"Plancher-les-Mines";6;6
+"Rouge Gazon (neuf bois)";6;6
+"Étang des Roseaux";14;0

@@ -1,12 +1,14 @@
-"secteur";"1";"2";"3";"4";"5"
-"Ballon de Servance";0;10;1;1;0
-"Bois Malvaux";1;0;0;0;0
-"Étang des Roseaux";2;0;6;0;0
-"Goulot du Loup";2;1;0;0;0
-"Goutte des saules";0;1;2;0;0
-"Hohneck";3;1;1;15;10
-"Morteville";6;3;3;3;0
-"Plain des bœufs";9;6;1;0;0
-"Plain des joncs";5;3;5;1;0
-"Plancher-les-Mines";0;1;1;0;0
-"Rouge Gazon (neuf bois)";1;2;1;0;0
+"secteur";"1";"2";"3";"4";"5";"6";"7";"8"
+"Ballon de Servance";1;1;1;4;6;0;0;2
+"Bois Malvaux";1;0;0;0;0;0;0;0
+"Étang des Roseaux";4;7;2;0;0;0;0;1
+"Goulot du Loup";5;0;0;0;2;0;0;0
+"Goutte des saules";0;2;0;0;1;0;0;0
+"Goutte des Saules";2;0;0;0;0;0;3;0
+"Hohneck";3;1;16;0;0;11;0;0
+"Morteville";5;3;2;3;2;0;0;0
+"Plain-des-boeufs";0;2;0;0;0;0;0;0
+"Plain des bœufs";13;2;0;4;2;1;2;0
+"Plain des joncs";11;4;0;2;1;0;3;3
+"Plancher-les-Mines";3;0;0;2;0;0;1;0
+"Rouge Gazon (neuf bois)";1;2;0;2;1;0;0;0
