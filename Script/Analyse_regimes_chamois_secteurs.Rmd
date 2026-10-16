@@ -1,0 +1,987 @@
+---
+title: "Régime alimentaire du chamois : secteurs et structure spatiale"
+author: "Dryas Statistics"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+lang: fr
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    theme: readable
+    self_contained: true
+params:
+  project_root: null
+  data_dir: "Output/Rdata"
+  spatial_dir: "BDD"
+  diet_file: "diet_long_chamois.Rdata"
+  gpkg_file: "BG_REG_ALIM_CHAMOIS.gpkg"
+  gpkg_layer: "bd_reg_cham_complete"
+  gpkg_id_col: null
+  gpkg_sector_col: null
+  gpkg_date_col: null
+  output_dir: "Output/Resultats_regimes_chamois"
+  min_n_sector: 5
+  nperm: 4999
+  nperm_pairwise: 1999
+  k_max: 8
+  min_cluster_size: 5
+  n_subsamples: 200
+  seed: 20261016
+  export_results: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+                      fig.width = 10, fig.height = 6, dpi = 150)
+required <- c("rmarkdown", "knitr", "dplyr", "tidyr", "ggplot2", "ggrepel",
+              "sf", "vegan", "cluster")
+missing_pkgs <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_pkgs)) {
+  stop("Installer les packages suivants avant compilation :\ninstall.packages(c(",
+       paste(sprintf('"%s"', missing_pkgs), collapse = ", "), "))")
+}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+set.seed(params$seed)
+options(stringsAsFactors = FALSE)
+theme_set(theme_minimal(base_size = 12))
+stopifnot(params$nperm >= 1, params$nperm_pairwise >= 1,
+          params$min_n_sector >= 2, params$k_max >= 2,
+          params$n_subsamples >= 1)
+fmt_p <- function(x) ifelse(is.na(x), NA_character_,
+                           ifelse(x < 0.001, "< 0,001", formatC(x, format = "f", digits = 3, decimal.mark = ",")))
+tab <- function(x, digits = 3, ...) knitr::kable(x, digits = digits, ...)
+# Chemins portables : tous les dossiers du YAML sont relatifs à la racine
+# du projet, et non au dossier de travail choisi dans RStudio.
+is_absolute_path <- function(path) {
+  startsWith(path, "/") || grepl("^[A-Za-z]:", path) || startsWith(path, "\\\\")
+}
+find_project_root <- function(explicit = NULL) {
+  input <- knitr::current_input(dir = TRUE)
+  input_dir <- if (length(input) == 1L && !is.na(input) && nzchar(input)) {
+    dirname(normalizePath(input, winslash = "/", mustWork = FALSE))
+  } else getwd()
+  if (!is.null(explicit) && length(explicit) == 1L && nzchar(explicit)) {
+    explicit <- path.expand(explicit)
+    if (!is_absolute_path(explicit)) explicit <- file.path(input_dir, explicit)
+    if (!dir.exists(explicit)) stop("Racine du projet introuvable : ", explicit)
+    return(normalizePath(explicit, winslash = "/", mustWork = TRUE))
+  }
+  # Recherche d'abord depuis le RMarkdown, puis depuis le dossier courant.
+  # On utilise l'organisation du projet plutôt que .git, qui peut appartenir
+  # à un dépôt parent contenant plusieurs projets.
+  for (start in unique(c(input_dir, getwd()))) {
+    current <- normalizePath(start, winslash = "/", mustWork = TRUE)
+    repeat {
+      if (dir.exists(file.path(current, "Script")) &&
+          dir.exists(file.path(current, "Output"))) return(current)
+      parent <- dirname(current)
+      if (identical(parent, current)) break
+      current <- parent
+    }
+  }
+  stop("Racine du projet non détectée. Conserver les dossiers Script et Output ",
+       "dans un même dossier parent, ou renseigner project_root dans le YAML. ",
+       "Dossier du RMarkdown : ", input_dir)
+}
+project_root <- find_project_root(params$project_root)
+project_path <- function(path) {
+  path <- path.expand(path)
+  if (!is_absolute_path(path)) path <- file.path(project_root, path)
+  normalizePath(path, winslash = "/", mustWork = FALSE)
+}
+# Résolution à l'exécution uniquement : aucun chemin personnel dans le fichier.
+paths <- list(
+  data_dir = project_path(params$data_dir),
+  spatial_dir = project_path(params$spatial_dir),
+  output_dir = project_path(params$output_dir)
+)
+
+resolve_input <- function(filename, directory = paths$data_dir) {
+  candidates <- file.path(directory, filename)
+  ok <- candidates[file.exists(candidates)]
+  if (!length(ok)) stop("Fichier introuvable : ", filename,
+                        ". Dossier recherché : ", directory,
+                        ". Vérifier data_dir ou spatial_dir dans l'en-tête YAML.")
+  normalizePath(ok[1], winslash = "/", mustWork = TRUE)
+}
+# Chargement dans un environnement isolé : aucun écrasement de l'espace de travail.
+read_rdata_object <- function(path, object) {
+  e <- new.env(parent = emptyenv())
+  loaded <- load(path, envir = e)
+  if (!object %in% loaded) stop("Objet ", object, " absent de ", basename(path),
+                              ". Objets présents : ", paste(loaded, collapse = ", "))
+  as.data.frame(e[[object]])
+}
+parse_date <- function(x) {
+  if (inherits(x, "Date")) return(x)
+  if (inherits(x, "POSIXt")) return(as.Date(x, tz = "UTC"))
+  s <- trimws(as.character(x))
+  res <- rep(as.Date(NA), length(s))
+  numeric_date <- grepl("^[0-9]+([.][0-9]+)?$", s) & !is.na(s)
+  res[numeric_date] <- as.Date(as.numeric(s[numeric_date]), origin = "1899-12-30")
+  for (fmt in c("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")) {
+    ii <- which(is.na(res) & !is.na(s) & nzchar(s) & !numeric_date)
+    if (length(ii)) res[ii] <- as.Date(s[ii], format = fmt)
+  }
+  res
+}
+normalize_id <- function(x) {
+  z <- gsub("[^0-9]", "", as.character(x))
+  z <- sub("^0+", "", z)
+  z[is.na(x) | !nzchar(z)] <- NA_character_
+  z
+}
+normalize_sector <- function(x) {
+  z <- trimws(as.character(x))
+  z[!is.na(z) & !nzchar(z)] <- NA_character_
+  z[z %in% c("Plain-des-Boeufs", "Plain des bœufs")] <- "Plain des bœufs"
+  z[z %in% "Ballon servance"] <- "Ballon de Servance"
+  z[z %in% "L'Etang des Roseaux"] <- "Étang des Roseaux"
+  z
+}
+# Si export_results = FALSE, aucun dossier ni fichier de résultats n'est créé.
+if (isTRUE(params$export_results)) {
+  dir.create(paths$output_dir, recursive = TRUE, showWarnings = FALSE)
+}
+export_csv <- function(x, file) {
+  if (isTRUE(params$export_results))
+    write.csv2(x, file.path(paths$output_dir, file), row.names = FALSE,
+               fileEncoding = "UTF-8", na = "")
+}
+save_plot <- function(p, name, width = 10, height = 6) {
+  if (isTRUE(params$export_results))
+    ggsave(file.path(paths$output_dir, name), p, width = width,
+           height = height, dpi = 200, bg = "white")
+}
+```
+
+
+
+
+# Préparation et contrôles des données
+
+## Import du fichier de régimes
+
+```{r import-diet}
+diet <- read_rdata_object(resolve_input(params$diet_file), "diet_long_chamois")
+needed <- c("N_Antagene", "species", "occurrences", "Date", "Latitude",
+            "Longitude", "Circuitcomptage")
+if (!all(needed %in% names(diet)))
+  stop("Colonnes manquantes : ", paste(setdiff(needed, names(diet)), collapse = ", "))
+diet$N_Antagene <- as.character(diet$N_Antagene)
+diet$species <- as.character(diet$species)
+if (!is.numeric(diet$occurrences)) stop("occurrences doit être numérique.")
+if (anyNA(diet[c("N_Antagene", "species", "occurrences")]))
+  stop("Identifiant, taxon ou valeur d'occurrences manquants.")
+if (any(!nzchar(diet$N_Antagene)) || any(!nzchar(diet$species)))
+  stop("Identifiant ou taxon vide.")
+if (any(!is.finite(diet$occurrences)) || any(diet$occurrences < 0))
+  stop("Les occurrences doivent être finies et positives ou nulles.")
+if (anyDuplicated(diet[c("N_Antagene", "species")]))
+  stop("Plusieurs lignes pour un même couple fèces × taxon : vérifier avant analyse.")
+meta <- diet %>% select(-species, -occurrences) %>% distinct()
+if (anyDuplicated(meta$N_Antagene))
+  stop("Des métadonnées contradictoires existent pour une même fèces.")
+meta$date_originale <- parse_date(meta$Date)
+meta$secteur_original <- as.character(meta$Circuitcomptage)
+meta$id_jointure <- normalize_id(meta$N_Antagene)
+
+wide <- diet %>% select(N_Antagene, species, occurrences) %>%
+  pivot_wider(names_from = species, values_from = occurrences, values_fill = 0)
+Y <- as.matrix(as.data.frame(wide[, setdiff(names(wide), "N_Antagene"), drop = FALSE]))
+rownames(Y) <- wide$N_Antagene
+storage.mode(Y) <- "double"
+# Tri fixe pour rendre les procédures sensibles aux égalités reproductibles.
+Y <- Y[order(rownames(Y)), order(colnames(Y)), drop = FALSE]
+meta <- as.data.frame(meta[match(rownames(Y), meta$N_Antagene), ])
+stopifnot(identical(meta$N_Antagene, rownames(Y)))
+```
+
+## Appariement au fichier cartographique
+
+Seuls les identifiants présents dans le fichier de régimes sont analysés. Le GPKG
+sert à compléter les **dates et secteurs manquants**, et à fournir les coordonnées
+pour l'exploration spatiale. Les valeurs déjà renseignées de date et de secteur
+ne sont pas remplacées. Les secteurs du fichier de régimes restent donc
+prioritaires, après harmonisation des variantes explicites.
+
+L'appariement est exact sur la partie numérique de l'identifiant : par exemple,
+`E00944149` correspond à `944 149`. Une correspondance n'est pas une validation
+sur le terrain des coordonnées.
+
+```{r jointure-cartographique}
+gpkg <- sf::st_read(resolve_input(params$gpkg_file, paths$spatial_dir),
+                     layer = params$gpkg_layer, quiet = TRUE)
+if (is.na(sf::st_crs(gpkg))) stop("Le GPKG n'a pas de système de coordonnées.")
+# Les lecteurs GDAL/sf peuvent transformer "Circuit co" en "Circuit.co"
+# ou "Circuit_co". On compare des noms sans accents ni ponctuation, tout en
+# conservant les noms réels pour extraire les colonnes.
+column_key <- function(x) {
+  z <- iconv(enc2utf8(x), from = "UTF-8", to = "ASCII//TRANSLIT", sub = "")
+  gsub("[^a-z0-9]", "", tolower(z))
+}
+resolve_gpkg_column <- function(candidates, explicit = NULL, required = TRUE, role) {
+  available <- names(sf::st_drop_geometry(gpkg))
+  if (!is.null(explicit) && length(explicit) == 1L && nzchar(explicit)) {
+    if (!explicit %in% available)
+      stop("Colonne GPKG demandée pour ", role, " : '", explicit,
+           "', absente. Colonnes disponibles : ", paste(available, collapse = ", "))
+    return(explicit)
+  }
+  keys <- column_key(available)
+  for (candidate in candidates) {
+    hit <- available[keys == column_key(candidate)]
+    if (length(hit) > 1L)
+      stop("Plusieurs colonnes possibles pour ", role, " : ",
+           paste(hit, collapse = ", "),
+           ". Renseigner gpkg_id_col, gpkg_sector_col ou gpkg_date_col dans le YAML.")
+    if (length(hit) == 1L) return(hit)
+  }
+  if (required)
+    stop("Colonne d'identifiant introuvable dans la couche '", params$gpkg_layer,
+         "'. Colonnes disponibles : ", paste(available, collapse = ", "),
+         ". Renseigner gpkg_id_col dans le YAML avec le nom exact de l'identifiant des prélèvements.")
+  warning("Colonne non reconnue pour ", role,
+          " : les valeurs correspondantes du GPKG ne compléteront pas les métadonnées.",
+          " Colonnes disponibles : ", paste(available, collapse = ", "))
+  NULL
+}
+id_col <- resolve_gpkg_column(
+  c("Identifica", "Identification", "Identifiant", "N_Antagene", "Code_Antagene"),
+  explicit = params$gpkg_id_col, role = "l'identifiant")
+sector_col <- resolve_gpkg_column(
+  c("Circuit co", "Circuit comptage", "Circuitcomptage", "Circuit", "Secteur"),
+  explicit = params$gpkg_sector_col, required = FALSE, role = "le secteur")
+date_col <- resolve_gpkg_column(
+  c("Date", "Date prelevement", "Date collecte", "Date echantillon"),
+  explicit = params$gpkg_date_col, required = FALSE, role = "la date")
+colonnes_gpkg <- data.frame(
+  role = c("Identifiant", "Secteur", "Date"),
+  colonne = c(id_col, if (is.null(sector_col)) "Non reconnue" else sector_col,
+               if (is.null(date_col)) "Non reconnue" else date_col))
+tab(colonnes_gpkg)
+export_csv(colonnes_gpkg, "correspondance_colonnes_gpkg.csv")
+gpkg$id_jointure <- normalize_id(gpkg[[id_col]])
+if (!any(!is.na(gpkg$id_jointure) & gpkg$id_jointure %in% meta$id_jointure))
+  stop("Aucun identifiant du GPKG ne correspond aux données de régime. Colonne utilisée : ",
+       id_col, ". Exemples GPKG : ", paste(head(gpkg[[id_col]], 5), collapse = ", "),
+       "; exemples régime : ", paste(head(meta$N_Antagene, 5), collapse = ", "))
+gpkg <- gpkg[!is.na(gpkg$id_jointure) & gpkg$id_jointure %in% meta$id_jointure, ]
+if (anyDuplicated(gpkg$id_jointure))
+  stop("Plusieurs positions GPKG pour un même identifiant : résoudre l'ambiguïté.")
+if (any(sf::st_is_empty(gpkg))) stop("Géométrie vide parmi les points appariés.")
+if (any(as.character(sf::st_geometry_type(gpkg)) != "POINT"))
+  stop("Des géométries appariées ne sont pas des points.")
+gpkg <- sf::st_transform(gpkg, 2154)
+xy <- sf::st_coordinates(gpkg)
+ll <- sf::st_coordinates(sf::st_transform(gpkg, 4326))
+g <- data.frame(id_jointure = gpkg$id_jointure,
+                secteur_gpkg = if (is.null(sector_col)) rep(NA_character_, nrow(gpkg)) else
+                  as.character(gpkg[[sector_col]]),
+                date_gpkg = if (is.null(date_col)) rep(as.Date(NA), nrow(gpkg)) else
+                  parse_date(gpkg[[date_col]]),
+                est = xy[, 1], nord = xy[, 2],
+                longitude_gpkg = ll[, 1], latitude_gpkg = ll[, 2])
+meta <- meta %>% left_join(g, by = "id_jointure") %>% as.data.frame()
+meta$secteur <- normalize_sector(dplyr::coalesce(meta$secteur_original, meta$secteur_gpkg))
+meta$date <- dplyr::coalesce(meta$date_originale, meta$date_gpkg)
+meta$mois <- as.integer(format(meta$date, "%m"))
+meta$date_completee <- is.na(meta$date_originale) & !is.na(meta$date_gpkg)
+meta$secteur_complete <- is.na(normalize_sector(meta$secteur_original)) & !is.na(meta$secteur)
+# Traiter aussi les champs de secteur vides plutôt que NA, le cas échéant.
+ii_blank <- is.na(normalize_sector(meta$secteur_original))
+meta$secteur[ii_blank] <- normalize_sector(meta$secteur_gpkg[ii_blank])
+meta$secteur_complete <- ii_blank & !is.na(meta$secteur)
+meta$signal_total <- rowSums(Y)
+meta$coord_appariees <- is.finite(meta$est) & is.finite(meta$nord)
+stopifnot(identical(meta$N_Antagene, rownames(Y)))
+
+completions <- meta %>% filter(date_completee | secteur_complete) %>%
+  select(N_Antagene, secteur_original, secteur_gpkg, secteur,
+         date_originale, date_gpkg, date)
+tab(completions)
+export_csv(completions, "metadonnees_completees.csv")
+
+# Écart entre coordonnées originales et GPKG, sans modifier les sources.
+meta$ecart_coord_m <- NA_real_
+valid_raw <- is.finite(meta$Latitude) & is.finite(meta$Longitude) &
+  abs(meta$Latitude) <= 90 & abs(meta$Longitude) <= 180 & meta$coord_appariees
+if (any(valid_raw)) {
+  raw_points <- sf::st_as_sf(meta[valid_raw, ], coords = c("Longitude", "Latitude"), crs = 4326)
+  raw_xy <- sf::st_coordinates(sf::st_transform(raw_points, 2154))
+  meta$ecart_coord_m[valid_raw] <- sqrt(rowSums(
+    (raw_xy - as.matrix(meta[valid_raw, c("est", "nord")]))^2))
+}
+coord_alertes <- meta %>% filter(!is.na(ecart_coord_m), ecart_coord_m > 20) %>%
+  select(N_Antagene, secteur, Latitude, Longitude,
+         latitude_gpkg, longitude_gpkg, ecart_coord_m)
+tab(coord_alertes, digits = 5)
+export_csv(coord_alertes, "ecarts_coordonnees_superieurs_20m.csv")
+```
+
+## Exclusions, normalisation et effectifs
+
+Une fèces sans aucun signal végétal est exclue de la comparaison des régimes ;
+elle n'est pas interprétée comme un régime vide. Chaque profil est divisé par son
+signal total afin de donner le même poids à chaque fèces, indépendamment du
+nombre de séquences. Les pourcentages obtenus **ne sont pas des pourcentages de
+biomasse consommée** et ne permettent pas d'inférer une sélection des plantes.
+Les catégories taxonomiques sont conservées telles que fournies.
+
+```{r exclusions-et-effectifs}
+controle_complet <- meta
+sans_signal <- meta %>% filter(signal_total <= 0)
+keep <- meta$signal_total > 0
+meta <- meta[keep, , drop = FALSE]
+Y <- Y[keep, , drop = FALSE]
+P <- sweep(Y, 1, rowSums(Y), "/")
+stopifnot(all(is.finite(P)), max(abs(rowSums(P) - 1)) < 1e-10,
+          identical(meta$N_Antagene, rownames(P)))
+D <- as.matrix(vegan::vegdist(P, method = "bray"))
+effectifs <- meta %>% filter(!is.na(secteur)) %>% count(secteur, name = "n") %>%
+  arrange(desc(n), secteur)
+secteurs_principaux <- effectifs$secteur[effectifs$n >= params$min_n_sector]
+if (length(secteurs_principaux) < 2) stop("Moins de deux secteurs suffisamment échantillonnés.")
+main <- !is.na(meta$secteur) & meta$secteur %in% secteurs_principaux & !is.na(meta$mois)
+tous <- !is.na(meta$secteur) & !is.na(meta$mois)
+spatial <- meta$coord_appariees & !is.na(meta$mois)
+
+bilan <- data.frame(
+  Etape = c("Fèces dans le fichier initial", "Sans signal végétal (exclues)",
+            "Fèces avec signal végétal", "Avec secteur et mois renseignés",
+            "Analyse principale : secteurs suffisamment échantillonnés",
+            "Analyse spatiale : coordonnées appariées et mois renseigné"),
+  n = c(nrow(controle_complet), nrow(sans_signal), nrow(meta), sum(tous), sum(main), sum(spatial)))
+tab(bilan)
+tab(effectifs)
+tab(as.data.frame.matrix(table(meta$secteur[main], meta$mois[main])), row.names = TRUE)
+if (nrow(sans_signal)) tab(sans_signal %>% select(N_Antagene, secteur, date))
+export_csv(bilan, "bilan_effectifs.csv")
+export_csv(effectifs, "effectifs_par_secteur.csv")
+export_csv(controle_complet, "controle_tous_les_echantillons.csv")
+export_csv(sans_signal, "echantillons_sans_signal.csv")
+```
+
+Avec les fichiers initiaux, on attend 115 fèces, dont 6 sans signal végétal,
+109 profils exploitables, 108 avec un secteur, 95 dans les six secteurs principaux
+et 86 appariés au GPKG. Ces valeurs servent de repère et ne bloquent pas le
+rapport si les données sont actualisées.
+
+# Fonctions d'analyse
+
+Les fonctions ci-dessous explicitent les calculs utilisés lors de l'exploration
+initiale. La PERMANOVA utilise le même principe géométrique que `adonis2` :
+inerties calculées à partir de la matrice de distances centrée. Ici, on teste
+**l'ajout du secteur après le mois**, puis on permute les étiquettes de secteur
+au sein du mois. Cela conserve la répartition mensuelle des effectifs par secteur.
+
+```{r fonctions-statistiques}
+center_distance <- function(d) {
+  a <- -0.5 * as.matrix(d)^2
+  a <- sweep(a, 1, rowMeans(a), "-")
+  sweep(a, 2, colMeans(a), "-")
+}
+# center_distance soustrait les moyennes successivement ; le résultat équivaut à JAJ.
+dummy <- function(x) {
+  x <- as.character(x)
+  lev <- sort(unique(x))
+  if (length(lev) <= 1L) return(matrix(numeric(0), nrow = length(x), ncol = 0))
+  out <- outer(x, lev[-1], FUN = "==") * 1
+  colnames(out) <- lev[-1]
+  out
+}
+perm_index <- function(blocks) {
+  out <- seq_along(blocks)
+  for (b in split(seq_along(blocks), as.character(blocks)))
+    out[b] <- b[sample.int(length(b))]
+  out
+}
+qr_basis <- function(X) {
+  q <- qr(X)
+  qr.Q(q)[, seq_len(q$rank), drop = FALSE]
+}
+permanova_conditionnelle <- function(d, secteur, mois, nperm = params$nperm) {
+  d <- as.matrix(d)
+  secteur <- as.character(secteur)
+  mois <- as.character(mois)
+  n <- nrow(d)
+  if (anyNA(secteur) || anyNA(mois) || length(secteur) != n || length(mois) != n)
+    stop("Métadonnées absentes ou mal alignées pour la PERMANOVA.")
+  G <- center_distance(d)
+  X0 <- cbind(Intercept = 1, dummy(mois))
+  Q0 <- qr_basis(X0)
+  r0 <- ncol(Q0)
+  ss0 <- sum(Q0 * (G %*% Q0))
+  total <- sum(diag(G))
+  stat <- function(s) {
+    X <- cbind(X0, dummy(s))
+    Q <- qr_basis(X)
+    r <- ncol(Q)
+    if (r <= r0 || n <= r) return(c(F = NA_real_, R2 = NA_real_))
+    ss <- sum(Q * (G %*% Q))
+    ajout <- ss - ss0
+    resid <- total - ss
+    c(F = (ajout / (r - r0)) / (resid / (n - r)), R2 = ajout / total)
+  }
+  observed <- stat(secteur)
+  if (!is.finite(observed["F"])) stop("Effet secteur non estimable après le mois.")
+  ge <- 0L
+  for (i in seq_len(nperm)) {
+    z <- stat(secteur[perm_index(mois)])
+    if (!is.finite(z["F"])) stop("Permutation non estimable : revoir les blocs.")
+    ge <- ge + (z["F"] >= observed["F"] - 1e-12)
+  }
+  data.frame(n = n, pseudo_F = unname(observed["F"]),
+             R2_ajoute = unname(observed["R2"]), p = (ge + 1) / (nperm + 1),
+             permutations = nperm)
+}
+aggregate_sector_month <- function(p, md) {
+  stopifnot(nrow(p) == nrow(md))
+  if (anyNA(md$secteur) || anyNA(md$mois)) stop("Secteur/mois manquant avant agrégation.")
+  blocks <- split(seq_len(nrow(md)), interaction(md$secteur, md$mois, drop = TRUE))
+  meanmat <- do.call(rbind, lapply(blocks, function(ii) colMeans(p[ii, , drop = FALSE])))
+  mdmean <- do.call(rbind, lapply(blocks, function(ii) {
+    data.frame(secteur = md$secteur[ii[1]], mois = md$mois[ii[1]],
+               n_feces = length(ii),
+               est = if (all(is.finite(md$est[ii]))) median(md$est[ii]) else NA_real_,
+               nord = if (all(is.finite(md$nord[ii]))) median(md$nord[ii]) else NA_real_)
+  }))
+  rownames(mdmean) <- rownames(meanmat)
+  list(P = meanmat, meta = mdmean)
+}
+# Dispersion sur l'espace euclidien de sqrt(Bray-Curtis), distances au centroïde,
+# correction sqrt(n/(n-1)), puis test F ajoutant le secteur après le mois.
+# Permutation des résidus du modèle réduit au sein du mois (Freedman-Lane).
+dispersion_conditionnelle <- function(d, secteur, mois, nperm = params$nperm) {
+  G <- center_distance(sqrt(as.matrix(d)))
+  eg <- eigen(G, symmetric = TRUE)
+  positive <- eg$values > 1e-10
+  if (!any(positive)) stop("Axe positif absent pour la dispersion.")
+  coords <- sweep(eg$vectors[, positive, drop = FALSE], 2,
+                  sqrt(eg$values[positive]), "*")
+  distances <- numeric(length(secteur))
+  for (ii in split(seq_along(secteur), as.character(secteur))) {
+    if (length(ii) < 2) stop("Au moins 2 fèces par secteur pour la dispersion.")
+    centered <- sweep(coords[ii, , drop = FALSE], 2,
+                       colMeans(coords[ii, , drop = FALSE]), "-")
+    distances[ii] <- sqrt(rowSums(centered^2)) * sqrt(length(ii)/(length(ii)-1))
+  }
+  X0 <- cbind(1, dummy(mois)); Q0 <- qr_basis(X0)
+  X1 <- cbind(X0, dummy(secteur)); Q1 <- qr_basis(X1)
+  H0 <- tcrossprod(Q0); H1 <- tcrossprod(Q1)
+  n <- length(distances); r0 <- ncol(Q0); r1 <- ncol(Q1)
+  if (n <= r1 || r1 <= r0) stop("Modèle de dispersion non estimable.")
+  statistic <- function(y) {
+    as.numeric((crossprod(y, (H1-H0) %*% y)/(r1-r0)) /
+                 (crossprod(y, (diag(n)-H1) %*% y)/(n-r1)))
+  }
+  observed <- statistic(distances)
+  fitted <- as.numeric(H0 %*% distances)
+  resid <- distances - fitted
+  ge <- 0L
+  for (i in seq_len(nperm))
+    ge <- ge + (statistic(fitted + resid[perm_index(mois)]) >= observed - 1e-12)
+  list(test = data.frame(F = observed, p = (ge+1)/(nperm+1), permutations = nperm),
+       distances = data.frame(secteur = secteur, mois = mois, distance = distances))
+}
+# Indice de Rand ajusté sans dépendance supplémentaire.
+adjusted_rand <- function(a, b) {
+  tb <- table(a, b)
+  c2 <- function(z) sum(z * (z-1)/2)
+  total <- length(a) * (length(a)-1)/2
+  if (total == 0) return(1)
+  obs <- c2(tb); ra <- c2(rowSums(tb)); cb <- c2(colSums(tb))
+  expected <- ra*cb/total
+  denominator <- (ra+cb)/2 - expected
+  if (abs(denominator) < 1e-14) return(ifelse(abs(obs-expected) < 1e-14, 1, 0))
+  (obs-expected)/denominator
+}
+# Moran multivarié sur les résidus des profils Hellinger ajustés au mois.
+# Graphe binaire k-NN symétrisé ; tous les ex aequo sont conservés.
+spatial_moran <- function(p, xy, mois, k = 5, nperm = params$nperm) {
+  stopifnot(nrow(p) == nrow(xy), nrow(p) == length(mois), all(is.finite(xy)))
+  if (nrow(p) <= k) stop("Pas assez de positions pour le nombre de voisins demandé.")
+  dd <- as.matrix(dist(xy)); diag(dd) <- Inf
+  threshold <- apply(dd, 1, function(z) sort(z, partial = k)[k])
+  W <- (sweep(dd, 1, threshold + 1e-8, "<=") * 1)
+  W <- pmax(W, t(W)); diag(W) <- 0
+  h <- sqrt(p)
+  X <- cbind(1, dummy(mois)); Q <- qr_basis(X)
+  R <- h - Q %*% crossprod(Q, h)
+  S <- tcrossprod(R)
+  denominator <- sum(diag(S))
+  if (denominator <= 1e-14 || sum(W) == 0) stop("Signal résiduel ou graphe spatial vide.")
+  scale <- nrow(R)/sum(W)
+  observed <- scale*sum(W*S)/denominator
+  ge <- 0L
+  for (i in seq_len(nperm)) {
+    pp <- perm_index(mois)
+    z <- scale*sum(W*S[pp, pp, drop = FALSE])/denominator
+    ge <- ge + (z >= observed - 1e-12)
+  }
+  data.frame(n = nrow(p), voisins = k, I = observed,
+             p = (ge+1)/(nperm+1), permutations = nperm)
+}
+```
+
+# Comparaison des secteurs
+
+## Composition moyenne
+
+```{r composition, fig.height=7}
+plant_names <- c(Rosaceae = "Rosacées", Acer = "Érables", Rubusidaeus = "Framboisier",
+                  Vacciniummyrtillus = "Myrtille", Oleaceae = "Oléacées",
+                  Betulaceae = "Bétulacées", Bistortaofficinalis = "Renouée bistorte",
+                  Ceratodonpurpureus = "Ceratodon (mousse)",
+                  Filipendulaulmaria = "Reine-des-prés", Ulmus = "Ormes", Abies = "Sapins")
+label_taxon <- function(z) {
+  y <- unname(plant_names[z]); y[is.na(y)] <- z[is.na(y)]; y
+}
+mean_sect <- do.call(rbind, lapply(secteurs_principaux, function(s)
+  colMeans(P[meta$secteur %in% s, , drop = FALSE])))
+rownames(mean_sect) <- secteurs_principaux
+top10 <- names(sort(colMeans(P[main, , drop = FALSE]), decreasing = TRUE))[seq_len(min(10, ncol(P)))]
+comp <- as.data.frame(mean_sect[, top10, drop = FALSE], check.names = FALSE)
+comp$Autres <- pmax(0, 1-rowSums(comp))
+comp$secteur <- rownames(comp)
+comp <- comp %>% pivot_longer(-secteur, names_to = "taxon", values_to = "proportion")
+comp$taxon <- factor(comp$taxon, levels = c(top10, "Autres"),
+                      labels = label_taxon(c(top10, "Autres")))
+comp$secteur <- factor(comp$secteur, levels = rev(secteurs_principaux))
+labels_sector <- setNames(paste0(effectifs$secteur, " (n=", effectifs$n, ")"), effectifs$secteur)
+p_comp <- ggplot(comp, aes(x = secteur, y = 100*proportion, fill = taxon)) +
+  geom_col(width = .7) + coord_flip() +
+  scale_x_discrete(labels = labels_sector) +
+  scale_fill_manual(values = c("#216e8c", "#e18d3b", "#8175b5", "#5d9972", "#ce6679",
+                                "#756047", "#49a5a0", "#a28461", "#98a84d", "#7e98b8", "#d2d9dd")) +
+  labs(x = NULL, y = "Proportion moyenne des séquences/occurrences (%)", fill = NULL,
+       title = "Composition végétale moyenne par secteur") +
+  theme(legend.position = "bottom", panel.grid.major.y = element_blank()) +
+  guides(fill = guide_legend(ncol = 3))
+p_comp
+save_plot(p_comp, "composition_par_secteur.png", height = 7)
+export_csv(comp, "composition_taxons_principaux.csv")
+```
+
+Les proportions décrivent les séquences/occurrences végétales identifiées,
+avec un poids égal par fèces. Elles ne mesurent pas directement les quantités
+consommées. Les moyennes descriptives du graphique ne sont pas ajustées sur le
+mois ; le test ci-dessous l'est.
+
+## PERMANOVA globale et sensibilités
+
+```{r permanova}
+set.seed(params$seed + 10L)
+main_test <- permanova_conditionnelle(D[main, main, drop = FALSE],
+                                      meta$secteur[main], meta$mois[main])
+all_test <- permanova_conditionnelle(D[tous, tous, drop = FALSE],
+                                     meta$secteur[tous], meta$mois[tous])
+agg_main <- aggregate_sector_month(P[main, , drop = FALSE], meta[main, , drop = FALSE])
+agg_test <- permanova_conditionnelle(vegan::vegdist(agg_main$P, "bray"),
+                                     agg_main$meta$secteur, agg_main$meta$mois)
+permanova_results <- bind_rows(
+  cbind(Analyse = "Secteurs principaux : fèces", main_test),
+  cbind(Analyse = "Tous secteurs renseignés : fèces", all_test),
+  cbind(Analyse = "Secteurs principaux : moyennes secteur × mois", agg_test))
+tab(permanova_results)
+export_csv(permanova_results, "permanova_secteurs.csv")
+
+# Vérification des statistiques observées avec vegan ; pas de nouvelle permutation.
+md_main <- data.frame(mois = factor(meta$mois[main]), secteur = factor(meta$secteur[main]))
+adonis_reference <- vegan::adonis2(
+  as.dist(D[main, main, drop = FALSE]) ~ mois + secteur,
+  data = md_main, permutations = 0, by = "terms")
+stopifnot(isTRUE(all.equal(as.numeric(adonis_reference["secteur", "F"]),
+                           main_test$pseudo_F, tolerance = 1e-7)),
+          isTRUE(all.equal(as.numeric(adonis_reference["secteur", "R2"]),
+                           main_test$R2_ajoute, tolerance = 1e-7)))
+```
+
+Sur les secteurs principaux, l'ajout du secteur après le mois explique
+**`r round(100*main_test$R2_ajoute, 1)` %** de l'inertie totale
+(pseudo-F = `r round(main_test$pseudo_F, 2)` ; p `r fmt_p(main_test$p)` ;
+n = `r main_test$n`). Ce R² est incrémental, pas un R² ajusté au nombre de paramètres.
+La sensibilité secteur × mois donne le même poids à chaque combinaison observée,
+ce qui réduit l'influence des collectes comportant beaucoup de fèces.
+
+## Hétérogénéité de dispersion
+
+Le test global peut répondre à la fois aux différences de composition moyenne
+et aux différences de variabilité interne. On examine donc aussi la dispersion
+entre fèces dans chaque secteur.
+
+```{r dispersion}
+set.seed(params$seed + 20L)
+disp_result <- dispersion_conditionnelle(D[main, main, drop = FALSE],
+                                          meta$secteur[main], meta$mois[main])
+tab(disp_result$test)
+p_disp <- ggplot(disp_result$distances, aes(x = secteur, y = distance)) +
+  geom_boxplot(outlier.shape = NA, fill = "#dcebef") +
+  geom_jitter(width = .12, height = 0, alpha = .6, size = 1.7) + coord_flip() +
+  labs(x = NULL, y = "Distance au centroïde (√Bray-Curtis, correction d'effectif)",
+       title = "Variabilité des régimes au sein des secteurs")
+p_disp
+save_plot(p_disp, "dispersion_par_secteur.png")
+export_csv(disp_result$test, "test_dispersion.csv")
+```
+
+```{r interpretation-dispersion, results='asis'}
+if (disp_result$test$p < .05) {
+  cat("**Les dispersions diffèrent entre secteurs.** Le signal de la PERMANOVA ne peut donc pas être attribué uniquement aux compositions moyennes. Les comparaisons restent exploratoires.\n")
+} else {
+  cat("Le test ne met pas en évidence de différence de dispersion au seuil de 5 %. Cela ne prouve pas l'égalité des dispersions, particulièrement pour les petits effectifs.\n")
+}
+```
+
+## Comparaisons par paires
+
+On ne compare que les **mois présents dans les deux secteurs**. Une paire sans
+mois commun n'est pas testée : les effets du secteur et du mois seraient
+confondus. La correction de Holm porte sur toutes les paires estimables.
+
+```{r comparaisons-paires}
+set.seed(params$seed + 30L)
+pair_list <- list(); no_overlap <- list()
+for (ab in combn(secteurs_principaux, 2, simplify = FALSE)) {
+  shared <- intersect(meta$mois[meta$secteur %in% ab[1]], meta$mois[meta$secteur %in% ab[2]])
+  shared <- shared[!is.na(shared)]
+  if (!length(shared)) {
+    no_overlap[[length(no_overlap)+1L]] <- data.frame(secteur_1 = ab[1], secteur_2 = ab[2])
+    next
+  }
+  ii <- meta$secteur %in% ab & meta$mois %in% shared
+  pair_list[[length(pair_list)+1L]] <- cbind(
+    data.frame(secteur_1 = ab[1], secteur_2 = ab[2], mois_communs = paste(sort(shared), collapse = ", ")),
+    permanova_conditionnelle(D[ii, ii, drop = FALSE], meta$secteur[ii], meta$mois[ii],
+                              nperm = params$nperm_pairwise))
+}
+pairwise <- bind_rows(pair_list)
+if (nrow(pairwise)) {
+  pairwise$p_Holm <- p.adjust(pairwise$p, method = "holm")
+  pairwise <- pairwise %>% arrange(p_Holm, secteur_1, secteur_2)
+  tab(pairwise)
+  export_csv(pairwise, "permanova_comparaisons_paires.csv")
+}
+paires_non_testees <- bind_rows(no_overlap)
+if (nrow(paires_non_testees)) tab(paires_non_testees)
+```
+
+# Recherche de groupes alimentaires
+
+Les coordonnées et les secteurs **ne sont pas utilisés pour construire les
+groupes**. Les groupes sont ensuite confrontés à la géographie. La classification
+PAM est calculée sur les distances de Bray-Curtis. Le nombre de groupes est exploré
+entre 2 et `r params$k_max`, puis choisi selon la silhouette moyenne, parmi les
+partitions dont chaque groupe contient au moins `r params$min_cluster_size`
+fèces. Ce seuil est un choix d'exploration et non une propriété biologique.
+
+## Choix du nombre de groupes et stabilité
+
+```{r clustering}
+set.seed(params$seed + 40L)
+k_values <- seq.int(2L, min(as.integer(params$k_max), nrow(P)-1L))
+fit_pam <- function(d, k) cluster::pam(as.dist(d), k = k, diss = TRUE,
+                                      do.swap = TRUE, pamonce = 0,
+                                      keep.diss = FALSE, keep.data = FALSE)
+fits <- lapply(k_values, function(k) fit_pam(D, k))
+cluster_choices <- bind_rows(lapply(seq_along(k_values), function(j) {
+  cl <- fits[[j]]$clustering
+  sizes <- table(cl)
+  data.frame(k = k_values[j], silhouette = mean(cluster::silhouette(cl, as.dist(D))[, 3]),
+             effectif_min = min(sizes), effectifs = paste(as.integer(sizes), collapse = ", "))
+}))
+eligible <- which(cluster_choices$effectif_min >= params$min_cluster_size)
+if (!length(eligible)) {
+  warning("Aucune partition ne respecte le seuil d'effectif : choix exploratoire sans cette contrainte.")
+  eligible <- seq_len(nrow(cluster_choices))
+}
+best <- eligible[which.max(cluster_choices$silhouette[eligible])]
+k <- cluster_choices$k[best]
+chosen <- fits[[best]]$clustering
+# Numéros lisibles : groupe 1 = le plus grand, etc.
+order_groups <- names(sort(table(chosen), decreasing = TRUE))
+meta$groupe <- match(as.character(chosen), order_groups)
+cluster_choices$retenu <- cluster_choices$k == k
+tab(cluster_choices)
+
+p_sil <- ggplot(cluster_choices, aes(k, silhouette)) + geom_line(color = "#216e8c") +
+  geom_point(aes(shape = effectif_min >= params$min_cluster_size), size = 3) +
+  geom_vline(xintercept = k, linetype = 2, color = "#ce6679") +
+  scale_x_continuous(breaks = k_values) +
+  labs(x = "Nombre de groupes", y = "Silhouette moyenne", shape = "Effectif minimal respecté",
+       title = "Séparation des groupes alimentaires") + theme(legend.position = "bottom")
+p_sil
+save_plot(p_sil, "choix_nombre_groupes.png")
+
+ari <- replicate(params$n_subsamples, {
+  ii <- sort(sample.int(nrow(P), size = floor(.8*nrow(P)), replace = FALSE))
+  z <- fit_pam(D[ii, ii, drop = FALSE], k)$clustering
+  adjusted_rand(meta$groupe[ii], z)
+})
+ward <- cutree(hclust(dist(sqrt(P)), method = "ward.D2"), k = k)
+average2 <- cutree(hclust(as.dist(D), method = "average"), k = 2)
+stabilite <- data.frame(
+  k = k, silhouette = cluster_choices$silhouette[best],
+  ARI_mediane_sous_echantillons = median(ari),
+  ARI_quantile_10 = unname(quantile(ari, .1)),
+  ARI_Ward_Hellinger = adjusted_rand(meta$groupe, ward),
+  repetitions = params$n_subsamples)
+tab(stabilite)
+export_csv(cluster_choices, "choix_nombre_groupes.csv")
+export_csv(stabilite, "stabilite_groupes.csv")
+```
+
+La partition présentée comporte **`r k` groupes**, avec une silhouette moyenne
+de **`r round(stabilite$silhouette, 3)`**. Une silhouette faible indique une séparation
+peu marquée. L'indice de Rand ajusté (ARI) décrit l'accord avec la partition initiale
+lors de sous-échantillonnages de 80 % des fèces, puis avec une méthode différente
+(Ward sur profils de Hellinger). **Ce diagnostic ne démontre pas l'existence de
+`r k` unités écologiques distinctes.**
+
+La classification hiérarchique moyenne à deux groupes donne ici des effectifs
+`r paste(as.integer(table(average2)), collapse = ' et ')`, utile pour repérer
+une classification dominée par l'isolement de profils atypiques.
+
+## Composition des groupes et répartition par secteur
+
+```{r profils-groupes}
+profils <- bind_rows(lapply(seq_len(k), function(z) {
+  avg <- colMeans(P[meta$groupe == z, , drop = FALSE])
+  top <- names(sort(avg, decreasing = TRUE))[seq_len(min(6, length(avg)))]
+  data.frame(groupe = z, n = sum(meta$groupe == z), taxon = top,
+             nom_taxon = label_taxon(top), proportion_moyenne = avg[top], row.names = NULL)
+}))
+tab(profils %>% mutate(pourcentage = 100*proportion_moyenne) %>%
+      select(groupe, n, nom_taxon, pourcentage), digits = 1)
+repartition <- as.data.frame.matrix(table(meta$secteur, meta$groupe))
+repartition <- data.frame(secteur = rownames(repartition), repartition, check.names = FALSE)
+tab(repartition)
+export_csv(profils, "composition_groupes.csv")
+export_csv(repartition, "groupes_par_secteur.csv")
+
+heat <- meta %>% filter(!is.na(secteur)) %>%
+  count(secteur, groupe, name = "n") %>%
+  complete(secteur, groupe = seq_len(k), fill = list(n = 0)) %>%
+  group_by(secteur) %>% mutate(proportion = n/sum(n)) %>% ungroup()
+heat$secteur <- factor(heat$secteur, levels = rev(effectifs$secteur))
+p_heat <- ggplot(heat, aes(factor(groupe), secteur, fill = proportion)) +
+  geom_tile(color = "white") + geom_text(aes(label = n), size = 3.8) +
+  scale_fill_gradient(low = "#f2f7fb", high = "#528faf", limits = c(0, 1)) +
+  labs(x = "Groupe alimentaire exploratoire", y = NULL, fill = "Proportion",
+       title = "Répartition des groupes par secteur", subtitle = "Les nombres indiquent les effectifs de fèces") +
+  theme(panel.grid = element_blank())
+p_heat
+save_plot(p_heat, "groupes_par_secteur.png", height = 7)
+```
+
+## Ordination des régimes
+
+Les deux premiers axes de la PCoA résument les distances de Bray-Curtis. Les
+pourcentages sont rapportés à l'inertie des axes positifs. Des axes négatifs
+peuvent exister avec cette distance ; la figure ne représente pas toute la
+variation des régimes. Aucun contour géographique ou intervalle de confiance
+n'est déduit de cette ordination.
+
+```{r pcoa}
+eg <- eigen(center_distance(D), symmetric = TRUE)
+if (sum(eg$values > 1e-10) < 2) stop("Moins de deux axes positifs pour la PCoA.")
+xy_pcoa <- sweep(eg$vectors[, 1:2, drop = FALSE], 2, sqrt(eg$values[1:2]), "*")
+pct <- 100*eg$values[1:2]/sum(eg$values[eg$values > 0])
+pcoa_df <- data.frame(meta, Axe1 = xy_pcoa[, 1], Axe2 = xy_pcoa[, 2])
+pcoa_df$secteur_affiche <- ifelse(pcoa_df$secteur %in% secteurs_principaux,
+                                  pcoa_df$secteur, "Autres / non renseigné")
+p_pcoa <- ggplot(pcoa_df, aes(Axe1, Axe2, color = secteur_affiche)) +
+  geom_point(size = 2.6, alpha = .8) +
+  labs(x = sprintf("Axe 1 (%.1f %% de l'inertie positive)", pct[1]),
+       y = sprintf("Axe 2 (%.1f %%)", pct[2]), color = "Secteur",
+       title = "Proximité des compositions alimentaires") +
+  theme(legend.position = "bottom")
+p_pcoa
+save_plot(p_pcoa, "ordination_pcoa.png")
+export_csv(pcoa_df, "coordonnees_pcoa_et_groupes.csv")
+```
+
+## Évolution saisonnière des groupes
+
+Les groupes sont construits tous mois confondus. Un groupe peut donc refléter
+une saison autant qu'un secteur. Le tableau et la figure permettent de vérifier
+ce point, notamment pour le Hohneck.
+
+```{r saison, fig.height=7}
+tab(as.data.frame.matrix(table(meta$groupe, meta$mois)), row.names = TRUE)
+hohneck <- meta %>% filter(secteur == "Hohneck")
+if (nrow(hohneck)) tab(as.data.frame.matrix(table(hohneck$groupe, hohneck$mois)), row.names = TRUE)
+group_colors <- setNames(grDevices::hcl.colors(k, "Dark 3"), as.character(seq_len(k)))
+season <- meta %>% filter(secteur %in% secteurs_principaux, !is.na(mois)) %>%
+  count(secteur, mois, groupe, name = "n")
+p_season <- ggplot(season, aes(factor(mois), n, fill = factor(groupe))) +
+  geom_col(position = "fill") + facet_wrap(~secteur, ncol = 3) +
+  scale_fill_manual(values = group_colors, drop = FALSE) +
+  labs(x = "Mois", y = "Proportion de fèces", fill = "Groupe",
+       title = "Les profils alimentaires peuvent changer au cours de la saison") +
+  theme(legend.position = "bottom")
+p_season
+save_plot(p_season, "groupes_par_mois_et_secteur.png", height = 7)
+```
+
+# Organisation spatiale des régimes
+
+## Données utilisables et test spatial
+
+L'analyse spatiale porte uniquement sur les positions appariées au GPKG et un
+mois renseigné. Les coordonnées brutes non appariées ne sont **ni corrigées
+arbitrairement, ni utilisées**. Des secteurs peuvent donc figurer dans la
+comparaison des régimes sans être couverts par le test spatial.
+
+On calcule un indice de Moran multivarié sur les profils de Hellinger après
+retrait de l'effet du mois :
+
+\[
+ I = \frac{n}{\sum_{ij} w_{ij}}\,
+     \frac{\mathrm{tr}(R^\top W R)}{\mathrm{tr}(R^\top R)}.
+\]
+
+Le graphe des plus proches voisins est symétrisé et tous les voisins ex æquo
+sont conservés. Le test est unilatéral pour une autocorrélation positive, par
+permutation des profils résiduels au sein du mois. Le graphe reste fixe.
+
+```{r tests-spatiaux}
+set.seed(params$seed + 50L)
+if (sum(spatial) <= 8) stop("Moins de neuf fèces appariées : analyse spatiale non réalisable.")
+spatial_tests <- bind_rows(lapply(c(3L, 5L, 8L), function(kk)
+  spatial_moran(P[spatial, , drop = FALSE],
+                 as.matrix(meta[spatial, c("est", "nord")]), meta$mois[spatial], k = kk)))
+spatial_tests$p_Holm <- p.adjust(spatial_tests$p, method = "holm")
+tab(spatial_tests)
+export_csv(spatial_tests, "autocorrelation_spatiale.csv")
+
+# Sensibilité : même poids par secteur × mois, médiane des positions de collecte.
+spatial_agg_mask <- spatial & !is.na(meta$secteur)
+agg_spatial <- aggregate_sector_month(P[spatial_agg_mask, , drop = FALSE],
+                                      meta[spatial_agg_mask, , drop = FALSE])
+spatial_agg_test <- spatial_moran(agg_spatial$P,
+                                  as.matrix(agg_spatial$meta[, c("est", "nord")]),
+                                  agg_spatial$meta$mois, k = 3L)
+tab(spatial_agg_test)
+export_csv(spatial_agg_test, "autocorrelation_moyennes_secteur_mois.csv")
+
+couverture <- meta %>% filter(!is.na(secteur)) %>% group_by(secteur) %>%
+  summarise(n_regimes = n(), n_cartographiables = sum(coord_appariees), .groups = "drop")
+tab(couverture)
+export_csv(couverture, "couverture_cartographique_par_secteur.csv")
+```
+
+Ce test recherche une **ressemblance accrue entre profils voisins**. Il ne
+recherche pas de frontières, ne détermine pas un nombre de clusters géographiques
+et ne démontre pas que chaque groupe alimentaire est propre à une zone.
+
+## Carte exploratoire
+
+Les disques sont placés à la médiane des coordonnées de chaque secteur apparié.
+Les parts représentent les groupes alimentaires parmi les seules fèces
+cartographiables du secteur. Les rayons sont fixes et ne représentent pas les
+effectifs. L'échelle correspond à des kilomètres dans un repère local Lambert-93.
+La carte n'affiche pas de limites de zones alimentaires.
+
+```{r carte, fig.width=10, fig.height=8}
+carto <- meta[spatial & !is.na(meta$secteur), , drop = FALSE]
+if (!nrow(carto)) stop("Aucun secteur cartographiable.")
+origin <- colMeans(meta[spatial, c("est", "nord"), drop = FALSE])
+centers <- carto %>% group_by(secteur) %>%
+  summarise(x = (median(est)-origin[1])/1000,
+            y = (median(nord)-origin[2])/1000, n = n(), .groups = "drop")
+parts <- carto %>% count(secteur, groupe, name = "n_groupe") %>%
+  complete(secteur, groupe = seq_len(k), fill = list(n_groupe = 0)) %>%
+  left_join(centers, by = "secteur") %>% group_by(secteur) %>% arrange(groupe, .by_group = TRUE) %>%
+  mutate(prop = n_groupe/sum(n_groupe), fin = cumsum(prop)*2*pi,
+         debut = lag(fin, default = 0)) %>% ungroup()
+polygons <- bind_rows(lapply(seq_len(nrow(parts)), function(i) {
+  z <- parts[i, ]
+  if (z$prop == 0) return(NULL)
+  theta <- seq(z$debut, z$fin, length.out = max(3, ceiling(80*z$prop)))
+  radius <- .55
+  data.frame(secteur = z$secteur, groupe = z$groupe,
+             x = c(z$x, z$x+radius*cos(theta), z$x),
+             y = c(z$y, z$y+radius*sin(theta), z$y))
+}))
+p_map <- ggplot() +
+  geom_polygon(data = polygons, aes(x, y, group = interaction(secteur, groupe),
+                                    fill = factor(groupe)), color = "white", linewidth = .3) +
+  ggrepel::geom_label_repel(data = centers, aes(x, y, label = paste0(secteur, "\n(n=", n, ")")),
+                            seed = params$seed, size = 3.4, max.overlaps = Inf,
+                            min.segment.length = 0, box.padding = .7) +
+  scale_fill_manual(values = group_colors, drop = FALSE) + coord_equal(clip = "off") +
+  scale_x_continuous(expand = expansion(mult = .2)) +
+  scale_y_continuous(expand = expansion(mult = .1)) +
+  labs(x = "Est-ouest (km)", y = "Nord-sud (km)", fill = "Groupe",
+       title = "Répartition exploratoire des groupes alimentaires",
+       subtitle = paste(sum(spatial), "fèces appariées au GPKG ; composition par secteur")) +
+  theme(legend.position = "bottom", plot.margin = margin(15, 35, 15, 35))
+p_map
+save_plot(p_map, "carte_groupes_alimentaires.png", height = 8)
+```
+
+# Synthèse et limites
+
+```{r synthese, results='asis'}
+if (main_test$p < .05) {
+  cat("- Un signal du secteur est détecté après prise en compte du mois.\n")
+} else {
+  cat("- Le test ne met pas en évidence d'effet du secteur après prise en compte du mois.\n")
+}
+if (disp_result$test$p < .05)
+  cat("- La dispersion diffère aussi entre secteurs : la PERMANOVA ne peut être interprétée comme un test des seules compositions moyennes.\n")
+if (any(spatial_tests$p_Holm < .05)) {
+  cat("- Un signal d'autocorrélation spatiale positive est observé sur le sous-ensemble cartographiable, après prise en compte du mois.\n")
+} else {
+  cat("- Le test spatial ne met pas en évidence de signal positif après correction de Holm.\n")
+}
+cat("- Les", k, "groupes présentés sont des profils alimentaires exploratoires ; leur nombre et leur affectation ne démontrent pas des unités géographiques stables.\n")
+```
+
+Les points suivants doivent accompagner l'interprétation :
+
+- Les mois ne sont pas présents dans tous les secteurs. Le modèle principal est
+  additif ; une interaction complète secteur × mois n'est pas estimable avec ce
+  plan incomplet. L'effet du secteur est donc une moyenne sous cette hypothèse.
+- Plusieurs fèces peuvent provenir des mêmes chamois. Sans identification
+  individuelle, les p-values restent exploratoires ; l'agrégation secteur × mois
+  réduit le poids des collectes nombreuses, sans résoudre toute dépendance.
+- La couverture cartographique est partielle et les coordonnées appariées au GPKG
+  restent à valider comme source de référence.
+- Les groupes sont construits tous mois confondus. Ils peuvent refléter la saison,
+  et un secteur peut changer de profil alimentaire au cours de l'étude.
+- Des profils voisins ne prouvent ni des domaines vitaux distincts, ni des
+  populations indépendantes, ni des frontières entre zones alimentaires.
+- Sans données de disponibilité des plantes, d'habitat ou d'altitude, ces analyses
+  ne démontrent pas de préférence alimentaire ni le mécanisme des différences.
+- Les taxons dominants sont décrits ; aucun test taxon par taxon n'est présenté
+  comme preuve d'une différence spécifique.
+
+# Exports et traçabilité
+
+```{r exports}
+export_csv(meta, "echantillons_analyse_et_groupes.csv")
+export_csv(data.frame(N_Antagene = rownames(P), P, check.names = FALSE),
+             "profils_normalises.csv")
+if (isTRUE(params$export_results)) {
+  saveRDS(list(params = params, metadata = meta, proportions = P,
+               distances_bray = D, permanova = permanova_results,
+               dispersion = disp_result, comparaisons_paires = pairwise,
+               choix_groupes = cluster_choices, stabilite = stabilite,
+               tests_spatiaux = spatial_tests,
+               test_spatial_agrege = spatial_agg_test),
+           file.path(paths$output_dir, "objets_analyse_chamois.rds"))
+  writeLines(capture.output(sessionInfo()), file.path(paths$output_dir, "sessionInfo.txt"))
+}
+```
+
+```{r session-info}
+sessionInfo()
+```
+
+
